@@ -166,7 +166,7 @@ fn hash_table_insert_with_proposal_after_slot_taken() {
     let proposal = table_proposal(&mut table, 1);
 
     table.insert_unique(0, 2, |_| 0);
-    let entry = unsafe { table.insert_with_proposal(proposal, 0, 1, |_| 0) };
+    let entry = unsafe { table.insert_with_proposal(proposal, 1, |_| 0) };
 
     assert_eq!(entry.get(), &1);
     assert!(table.find_entry(0, |entry| *entry == 1).is_ok());
@@ -182,7 +182,7 @@ fn hash_table_insert_with_proposal_after_rehash() {
         table.insert_unique(0, value, |_| 0);
     }
 
-    let entry = unsafe { table.insert_with_proposal(proposal, 0, 999, |_| 0) };
+    let entry = unsafe { table.insert_with_proposal(proposal, 999, |_| 0) };
     assert_eq!(entry.get(), &999);
 
     for value in 0..128 {

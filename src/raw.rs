@@ -102,6 +102,7 @@ pub struct InsertionProposal {
     probe_seq: ProbeSeq,
     ctrl_snapshot: NonNull<u8>,
     bucket_mask: usize,
+    hash: u64,
     index: usize,
 }
 
@@ -1000,19 +1001,26 @@ impl<T, A: Allocator> RawTable<T, A> {
     pub(crate) unsafe fn insert_with_proposal(
         &mut self,
         proposal: InsertionProposal,
-        hash: u64,
         value: T,
         hasher: impl Fn(&T) -> u64,
     ) -> Bucket<T> {
-        match unsafe { self.validate_proposal(proposal) } {
-            ProposalStatus::Valid => unsafe { self.insert_at_index(hash, proposal.index, value) },
+        let status = unsafe { self.validate_proposal(proposal) };
+
+        if likely(matches!(status, ProposalStatus::Valid)) {
+            return unsafe { self.insert_at_index(proposal.hash, proposal.index, value) };
+        }
+
+        match status {
+            ProposalStatus::Valid => unsafe {
+                self.insert_at_index(proposal.hash, proposal.index, value)
+            },
             ProposalStatus::Occupied => unsafe {
                 let new_index = self
                     .table
                     .find_insert_index_with_probe_seq(proposal.probe_seq);
-                self.insert_at_index(hash, new_index, value)
+                self.insert_at_index(proposal.hash, new_index, value)
             },
-            ProposalStatus::Rehashed => self.insert(hash, value, hasher),
+            ProposalStatus::Rehashed => self.insert(proposal.hash, value, hasher),
         }
     }
 
@@ -1679,6 +1687,7 @@ impl RawTableInner {
                         probe_seq: probe_seq,
                         ctrl_snapshot: self.ctrl,
                         bucket_mask: self.bucket_mask,
+                        hash,
                         index: self.fix_insert_index(insert_index),
                     });
                 }

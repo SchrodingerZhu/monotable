@@ -1652,10 +1652,9 @@ where
         k: K,
         v: V,
     ) -> (&K, &mut V) {
-        let hash = make_hash::<K, S>(&self.hash_builder, &k);
         let bucket = unsafe {
             self.table
-                .insert_with_proposal(proposal, hash, (k, v), make_hasher(&self.hash_builder))
+                .insert_with_proposal(proposal, (k, v), make_hasher(&self.hash_builder))
         };
         let (key, value) = unsafe { bucket.as_mut() };
         (key, value)

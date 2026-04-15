@@ -738,11 +738,10 @@ where
     pub unsafe fn insert_with_proposal(
         &mut self,
         proposal: InsertionProposal,
-        hash: u64,
         value: T,
         hasher: impl Fn(&T) -> u64,
     ) -> OccupiedEntry<'_, T, A> {
-        let bucket = unsafe { self.raw.insert_with_proposal(proposal, hash, value, hasher) };
+        let bucket = unsafe { self.raw.insert_with_proposal(proposal, value, hasher) };
         OccupiedEntry {
             bucket,
             table: self,
