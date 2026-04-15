@@ -3,8 +3,8 @@
 //! * Int key distribution: low bit heavy, top bit heavy, and random.
 //! * Task: basic functionality: insert, insert_erase, lookup, lookup_fail, iter
 use criterion::Criterion;
-use hashbrown::DefaultHashBuilder;
-use hashbrown::{HashMap, HashSet};
+use monotable::DefaultHashBuilder;
+use monotable::{HashMap, HashSet};
 use std::{
     collections::hash_map::RandomState,
     hint::black_box,

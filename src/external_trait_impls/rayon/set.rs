@@ -30,27 +30,6 @@ impl<T: Send, A: Allocator + Send> ParallelIterator for IntoParIter<T, A> {
     }
 }
 
-/// Parallel draining iterator over entries of a set.
-///
-/// This iterator is created by the [`par_drain`] method on [`HashSet`].
-/// See its documentation for more.
-///
-/// [`par_drain`]: HashSet::par_drain
-pub struct ParDrain<'a, T, A: Allocator = Global> {
-    inner: map::ParDrain<'a, T, (), A>,
-}
-
-impl<T: Send, A: Allocator + Send + Sync> ParallelIterator for ParDrain<'_, T, A> {
-    type Item = T;
-
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        self.inner.map(|(k, _)| k).drive_unindexed(consumer)
-    }
-}
-
 /// Parallel iterator over shared references to elements in a set.
 ///
 /// This iterator is created by the [`par_iter`] method on [`HashSet`]
@@ -284,14 +263,6 @@ where
     T: Eq + Hash + Send,
     A: Allocator + Send,
 {
-    /// Consumes (potentially in parallel) all values in an arbitrary order,
-    /// while preserving the set's allocated memory for reuse.
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn par_drain(&mut self) -> ParDrain<'_, T, A> {
-        ParDrain {
-            inner: self.map.par_drain(),
-        }
-    }
 }
 
 impl<T: Send, S, A: Allocator + Send> IntoParallelIterator for HashSet<T, S, A> {

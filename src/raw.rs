@@ -765,63 +765,6 @@ impl<T, A: Allocator> RawTable<T, A> {
         unsafe { Bucket::from_base_index(self.data_end(), index) }
     }
 
-    /// Erases an element from the table without dropping it.
-    #[cfg_attr(feature = "inline-more", inline)]
-    unsafe fn erase_no_drop(&mut self, item: &Bucket<T>) {
-        unsafe {
-            let index = self.bucket_index(item);
-            self.table.erase(index);
-        }
-    }
-
-    /// Erases an element from the table, dropping it in place.
-    #[cfg_attr(feature = "inline-more", inline)]
-    #[expect(clippy::needless_pass_by_value)]
-    pub(crate) unsafe fn erase(&mut self, item: Bucket<T>) {
-        unsafe {
-            // Erase the element from the table first since drop might panic.
-            self.erase_no_drop(&item);
-            item.drop();
-        }
-    }
-
-    /// Removes an element from the table, returning it.
-    ///
-    /// This also returns an index to the newly free bucket.
-    #[cfg_attr(feature = "inline-more", inline)]
-    #[expect(clippy::needless_pass_by_value)]
-    pub(crate) unsafe fn remove(&mut self, item: Bucket<T>) -> (T, usize) {
-        unsafe {
-            self.erase_no_drop(&item);
-            (item.read(), self.bucket_index(&item))
-        }
-    }
-
-    /// Removes an element from the table, returning it.
-    ///
-    /// This also returns an index to the newly free bucket
-    /// and the former `Tag` for that bucket.
-    #[cfg_attr(feature = "inline-more", inline)]
-    #[expect(clippy::needless_pass_by_value)]
-    pub(crate) unsafe fn remove_tagged(&mut self, item: Bucket<T>) -> (T, usize, Tag) {
-        unsafe {
-            let index = self.bucket_index(&item);
-            let tag = *self.table.ctrl(index);
-            self.table.erase(index);
-            (item.read(), index, tag)
-        }
-    }
-
-    /// Finds and removes an element from the table, returning it.
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub(crate) fn remove_entry(&mut self, hash: u64, eq: impl FnMut(&T) -> bool) -> Option<T> {
-        // Avoid `Option::map` because it bloats LLVM IR.
-        match self.find(hash, eq) {
-            Some(bucket) => Some(unsafe { self.remove(bucket).0 }),
-            None => None,
-        }
-    }
-
     /// Marks all table buckets as empty without dropping their contents.
     #[cfg_attr(feature = "inline-more", inline)]
     pub(crate) fn clear_no_drop(&mut self) {
@@ -842,64 +785,6 @@ impl<T, A: Allocator> RawTable<T, A> {
             // even in case of panic during the dropping of the elements so
             // that there will be no double drop of the elements.
             self_.table.drop_elements::<T>();
-        }
-    }
-
-    /// Shrinks the table to fit `max(self.len(), min_size)` elements.
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub(crate) fn shrink_to(&mut self, min_size: usize, hasher: impl Fn(&T) -> u64) {
-        // Calculate the minimal number of elements that we need to reserve
-        // space for.
-        let min_size = usize::max(self.table.items, min_size);
-        if min_size == 0 {
-            let mut old_inner = mem::replace(&mut self.table, RawTableInner::NEW);
-            unsafe {
-                // SAFETY:
-                // 1. We call the function only once;
-                // 2. We know for sure that `alloc` and `table_layout` matches the [`Allocator`]
-                //    and [`TableLayout`] that were used to allocate this table.
-                // 3. If any elements' drop function panics, then there will only be a memory leak,
-                //    because we have replaced the inner table with a new one.
-                old_inner.drop_inner_table::<T, _>(&self.alloc, Self::TABLE_LAYOUT);
-            }
-            return;
-        }
-
-        // Calculate the number of buckets that we need for this number of
-        // elements. If the calculation overflows then the requested bucket
-        // count must be larger than what we have right and nothing needs to be
-        // done.
-        let Some(min_buckets) = capacity_to_buckets(min_size, Self::TABLE_LAYOUT) else {
-            return;
-        };
-
-        // If we have more buckets than we need, shrink the table.
-        if min_buckets < self.num_buckets() {
-            // Fast path if the table is empty
-            if self.table.items == 0 {
-                let new_inner =
-                    RawTableInner::with_capacity(&self.alloc, Self::TABLE_LAYOUT, min_size);
-                let mut old_inner = mem::replace(&mut self.table, new_inner);
-                unsafe {
-                    // SAFETY:
-                    // 1. We call the function only once;
-                    // 2. We know for sure that `alloc` and `table_layout` matches the [`Allocator`]
-                    //    and [`TableLayout`] that were used to allocate this table.
-                    // 3. If any elements' drop function panics, then there will only be a memory leak,
-                    //    because we have replaced the inner table with a new one.
-                    old_inner.drop_inner_table::<T, _>(&self.alloc, Self::TABLE_LAYOUT);
-                }
-            } else {
-                // SAFETY:
-                // 1. We know for sure that `min_size >= self.table.items`.
-                // 2. The [`RawTableInner`] must already have properly initialized control bytes since
-                //    we will never expose RawTable::new_uninitialized in a public API.
-                let result = unsafe { self.resize(min_size, hasher, Fallibility::Infallible) };
-
-                // SAFETY: The result of calling the `resize` function cannot be an error
-                // because `fallibility == Fallibility::Infallible.
-                unsafe { result.unwrap_unchecked() };
-            }
         }
     }
 
@@ -974,49 +859,6 @@ impl<T, A: Allocator> RawTable<T, A> {
         }
     }
 
-    /// Allocates a new table of a different size and moves the contents of the
-    /// current table into it.
-    ///
-    /// # Safety
-    ///
-    /// The [`RawTableInner`] must have properly initialized control bytes,
-    /// otherwise calling this function results in [`undefined behavior`]
-    ///
-    /// The caller of this function must ensure that `capacity >= self.table.items`
-    /// otherwise:
-    ///
-    /// * If `self.table.items != 0`, calling of this function with `capacity`
-    ///   equal to 0 (`capacity == 0`) results in [`undefined behavior`].
-    ///
-    /// * If `self.table.items > capacity_to_buckets(capacity, Self::TABLE_LAYOUT)`
-    ///   calling this function are never return (will loop infinitely).
-    ///
-    /// See [`RawTableInner::find_insert_index`] for more information.
-    ///
-    /// [`undefined behavior`]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
-    unsafe fn resize(
-        &mut self,
-        capacity: usize,
-        hasher: impl Fn(&T) -> u64,
-        fallibility: Fallibility,
-    ) -> Result<(), TryReserveError> {
-        // SAFETY:
-        // 1. The caller of this function guarantees that `capacity >= self.table.items`.
-        // 2. We know for sure that `alloc` and `layout` matches the [`Allocator`] and
-        //    [`TableLayout`] that were used to allocate this table.
-        // 3. The caller ensures that the control bytes of the `RawTableInner`
-        //    are already initialized.
-        unsafe {
-            self.table.resize_inner(
-                &self.alloc,
-                capacity,
-                &|table, index| hasher(table.bucket::<T>(index).as_ref()),
-                fallibility,
-                Self::TABLE_LAYOUT,
-            )
-        }
-    }
-
     /// Inserts a new element into the table, and returns its raw bucket.
     ///
     /// This does not check if the given element already exists in the table.
@@ -1086,30 +928,6 @@ impl<T, A: Allocator> RawTable<T, A> {
     ///
     /// Returns tag for bucket if the bucket is emptied out.
     ///
-    /// This does not check if the given bucket is actually occupied.
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub(crate) unsafe fn replace_bucket_with<F>(&mut self, bucket: Bucket<T>, f: F) -> Option<Tag>
-    where
-        F: FnOnce(T) -> Option<T>,
-    {
-        unsafe {
-            let index = self.bucket_index(&bucket);
-            let old_ctrl = *self.table.ctrl(index);
-            debug_assert!(self.is_bucket_full(index));
-            let old_growth_left = self.table.growth_left;
-            let item = self.remove(bucket).0;
-            if let Some(new_item) = f(item) {
-                self.table.growth_left = old_growth_left;
-                self.table.set_ctrl(index, old_ctrl);
-                self.table.items += 1;
-                self.bucket(index).write(new_item);
-                None
-            } else {
-                Some(old_ctrl)
-            }
-        }
-    }
-
     /// Searches for an element in the table. If the element is not found,
     /// returns `Err` with the position of a slot where an element with the
     /// same hash could be inserted.
@@ -1400,34 +1218,6 @@ impl<T, A: Allocator> RawTable<T, A> {
     #[inline(always)]
     pub(crate) unsafe fn full_buckets_indices(&self) -> FullBucketsIndices {
         unsafe { self.table.full_buckets_indices() }
-    }
-
-    /// Returns an iterator which removes all elements from the table without
-    /// freeing the memory.
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub(crate) fn drain(&mut self) -> RawDrain<'_, T, A> {
-        unsafe {
-            let iter = self.iter();
-            self.drain_iter_from(iter)
-        }
-    }
-
-    /// Returns an iterator which removes all elements from the table without
-    /// freeing the memory.
-    ///
-    /// Iteration starts at the provided iterator's current location.
-    ///
-    /// It is up to the caller to ensure that the iterator is valid for this
-    /// `RawTable` and covers all items that remain in the table.
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub(crate) unsafe fn drain_iter_from(&mut self, iter: RawIter<T>) -> RawDrain<'_, T, A> {
-        debug_assert_eq!(iter.len(), self.len());
-        RawDrain {
-            iter,
-            table: mem::replace(&mut self.table, RawTableInner::NEW),
-            orig_table: NonNull::from(&mut self.table),
-            marker: PhantomData,
-        }
     }
 
     /// Returns an iterator which consumes all elements from the table.
@@ -3189,104 +2979,6 @@ impl RawTableInner {
         self.growth_left = bucket_mask_to_capacity(self.bucket_mask);
     }
 
-    /// Erases the [`Bucket`]'s control byte at the given index so that it does not
-    /// triggered as full, decreases the `items` of the table and, if it can be done,
-    /// increases `self.growth_left`.
-    ///
-    /// This function does not actually erase / drop the [`Bucket`] itself, i.e. it
-    /// does not make any changes to the `data` parts of the table. The caller of this
-    /// function must take care to properly drop the `data`, otherwise calling this
-    /// function may result in a memory leak.
-    ///
-    /// # Safety
-    ///
-    /// You must observe the following safety rules when calling this function:
-    ///
-    /// * The [`RawTableInner`] has already been allocated;
-    ///
-    /// * It must be the full control byte at the given position;
-    ///
-    /// * The `index` must not be greater than the `RawTableInner.bucket_mask`, i.e.
-    ///   `index <= RawTableInner.bucket_mask` or, in other words, `(index + 1)` must
-    ///   be no greater than the number returned by the function [`RawTableInner::num_buckets`].
-    ///
-    /// Calling this function on a table that has not been allocated results in [`undefined behavior`].
-    ///
-    /// Calling this function on a table with no elements is unspecified, but calling subsequent
-    /// functions is likely to result in [`undefined behavior`] due to overflow subtraction
-    /// (`self.items -= 1 cause overflow when self.items == 0`).
-    ///
-    /// See also [`Bucket::as_ptr`] method, for more information about of properly removing
-    /// or saving `data element` from / into the [`RawTable`] / [`RawTableInner`].
-    ///
-    /// [`undefined behavior`]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
-    #[inline]
-    unsafe fn erase(&mut self, index: usize) {
-        unsafe {
-            debug_assert!(self.is_bucket_full(index));
-        }
-
-        // This is the same as `index.wrapping_sub(Group::WIDTH) % self.num_buckets()` because
-        // the number of buckets is a power of two, and `self.bucket_mask = self.num_buckets() - 1`.
-        let index_before = index.wrapping_sub(Group::WIDTH) & self.bucket_mask;
-        // SAFETY:
-        // - The caller must uphold the safety contract for `erase` method;
-        // - `index_before` is guaranteed to be in range due to masking with `self.bucket_mask`
-        let (empty_before, empty_after) = unsafe {
-            (
-                Group::load(self.ctrl(index_before)).match_empty(),
-                Group::load(self.ctrl(index)).match_empty(),
-            )
-        };
-
-        // Inserting and searching in the map is performed by two key functions:
-        //
-        // - The `find_insert_index` function that looks up the index of any `Tag::EMPTY` or `Tag::DELETED`
-        //   slot in a group to be able to insert. If it doesn't find an `Tag::EMPTY` or `Tag::DELETED`
-        //   slot immediately in the first group, it jumps to the next `Group` looking for it,
-        //   and so on until it has gone through all the groups in the control bytes.
-        //
-        // - The `find_inner` function that looks for the index of the desired element by looking
-        //   at all the `FULL` bytes in the group. If it did not find the element right away, and
-        //   there is no `Tag::EMPTY` byte in the group, then this means that the `find_insert_index`
-        //   function may have found a suitable slot in the next group. Therefore, `find_inner`
-        //   jumps further, and if it does not find the desired element and again there is no `Tag::EMPTY`
-        //   byte, then it jumps further, and so on. The search stops only if `find_inner` function
-        //   finds the desired element or hits an `Tag::EMPTY` slot/byte.
-        //
-        // Accordingly, this leads to two consequences:
-        //
-        // - The map must have `Tag::EMPTY` slots (bytes);
-        //
-        // - You can't just mark the byte to be erased as `Tag::EMPTY`, because otherwise the `find_inner`
-        //   function may stumble upon an `Tag::EMPTY` byte before finding the desired element and stop
-        //   searching.
-        //
-        // Thus it is necessary to check all bytes after and before the erased element. If we are in
-        // a contiguous `Group` of `FULL` or `Tag::DELETED` bytes (the number of `FULL` or `Tag::DELETED` bytes
-        // before and after is greater than or equal to `Group::WIDTH`), then we must mark our byte as
-        // `Tag::DELETED` in order for the `find_inner` function to go further. On the other hand, if there
-        // is at least one `Tag::EMPTY` slot in the `Group`, then the `find_inner` function will still stumble
-        // upon an `Tag::EMPTY` byte, so we can safely mark our erased byte as `Tag::EMPTY` as well.
-        //
-        // Finally, since `index_before == (index.wrapping_sub(Group::WIDTH) & self.bucket_mask) == index`
-        // and given all of the above, tables smaller than the group width (self.num_buckets() < Group::WIDTH)
-        // cannot have `Tag::DELETED` bytes.
-        //
-        // Note that in this context `leading_zeros` refers to the bytes at the end of a group, while
-        // `trailing_zeros` refers to the bytes at the beginning of a group.
-        let ctrl = if empty_before.leading_zeros() + empty_after.trailing_zeros() >= Group::WIDTH {
-            Tag::DELETED
-        } else {
-            self.growth_left += 1;
-            Tag::EMPTY
-        };
-        // SAFETY: the caller must uphold the safety contract for `erase` method.
-        unsafe {
-            self.set_ctrl(index, ctrl);
-        }
-        self.items -= 1;
-    }
 }
 
 impl<T: Clone, A: Allocator + Clone> Clone for RawTable<T, A> {
@@ -3405,7 +3097,7 @@ impl<T: Clone, A: Allocator + Clone> RawTableClone for RawTable<T, A> {
     }
 }
 #[cfg(feature = "nightly")]
-impl<T: core::clone::TrivialClone, A: Allocator + Clone> RawTableClone for RawTable<T, A> {
+impl<T: Copy, A: Allocator + Clone> RawTableClone for RawTable<T, A> {
     #[cfg_attr(feature = "inline-more", inline)]
     unsafe fn clone_from_spec(&mut self, source: &Self) {
         unsafe {
@@ -4098,79 +3790,6 @@ impl<T, A: Allocator> ExactSizeIterator for RawIntoIter<T, A> {}
 impl<T, A: Allocator> FusedIterator for RawIntoIter<T, A> {}
 
 /// Iterator which consumes elements without freeing the table storage.
-pub(crate) struct RawDrain<'a, T, A: Allocator = Global> {
-    iter: RawIter<T>,
-
-    // The table is moved into the iterator for the duration of the drain. This
-    // ensures that an empty table is left if the drain iterator is leaked
-    // without dropping.
-    table: RawTableInner,
-    orig_table: NonNull<RawTableInner>,
-
-    // We don't use a &'a mut RawTable<T> because we want RawDrain to be
-    // covariant over T.
-    marker: PhantomData<&'a RawTable<T, A>>,
-}
-
-impl<T, A: Allocator> RawDrain<'_, T, A> {
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub(crate) fn iter(&self) -> RawIter<T> {
-        self.iter.clone()
-    }
-}
-
-unsafe impl<T, A: Allocator> Send for RawDrain<'_, T, A>
-where
-    T: Send,
-    A: Send,
-{
-}
-unsafe impl<T, A: Allocator> Sync for RawDrain<'_, T, A>
-where
-    T: Sync,
-    A: Sync,
-{
-}
-
-impl<T, A: Allocator> Drop for RawDrain<'_, T, A> {
-    #[cfg_attr(feature = "inline-more", inline)]
-    fn drop(&mut self) {
-        unsafe {
-            // Drop all remaining elements. Note that this may panic.
-            self.iter.drop_elements();
-
-            // Reset the contents of the table now that all elements have been
-            // dropped.
-            self.table.clear_no_drop();
-
-            // Move the now empty table back to its original location.
-            self.orig_table
-                .as_ptr()
-                .copy_from_nonoverlapping(&raw const self.table, 1);
-        }
-    }
-}
-
-impl<T, A: Allocator> Iterator for RawDrain<'_, T, A> {
-    type Item = T;
-
-    #[cfg_attr(feature = "inline-more", inline)]
-    fn next(&mut self) -> Option<T> {
-        unsafe {
-            let item = self.iter.next()?;
-            Some(item.read())
-        }
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
-    }
-}
-
-impl<T, A: Allocator> ExactSizeIterator for RawDrain<'_, T, A> {}
-impl<T, A: Allocator> FusedIterator for RawDrain<'_, T, A> {}
-
 /// Iterator over occupied buckets that could match a given hash.
 ///
 /// `RawTable` only stores 7 bits of the hash value, so this iterator may return
@@ -4313,28 +3932,6 @@ impl Iterator for RawIterHashIndices {
                 self.bitmask = self.group.match_tag(self.tag_hash).into_iter();
             }
         }
-    }
-}
-
-pub(crate) struct RawExtractIf<'a, T, A: Allocator> {
-    pub iter: RawIter<T>,
-    pub table: &'a mut RawTable<T, A>,
-}
-
-impl<T, A: Allocator> RawExtractIf<'_, T, A> {
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub(crate) fn next<F>(&mut self, mut f: F) -> Option<T>
-    where
-        F: FnMut(&mut T) -> bool,
-    {
-        unsafe {
-            for item in &mut self.iter {
-                if f(item.as_mut()) {
-                    return Some(self.table.remove(item).0);
-                }
-            }
-        }
-        None
     }
 }
 

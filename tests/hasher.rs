@@ -2,7 +2,7 @@
 
 #![cfg(not(miri))] // FIXME: takes too long
 
-use hashbrown::HashSet;
+use monotable::HashSet;
 use std::hash::{BuildHasher, BuildHasherDefault, Hasher};
 
 fn check<S: BuildHasher + Default>() {
@@ -20,10 +20,10 @@ fn check<S: BuildHasher + Default>() {
     assert!(!set.contains(&i32::MAX));
 }
 
-/// Use hashbrown's default hasher.
+/// Use monotable's default hasher.
 #[test]
 fn default() {
-    check::<hashbrown::DefaultHashBuilder>();
+    check::<monotable::DefaultHashBuilder>();
 }
 
 /// Use std's default hasher.

@@ -1,9 +1,10 @@
 use self::RustcEntry::*;
 use crate::alloc::{Allocator, Global};
-use crate::map::{Drain, HashMap, IntoIter, Iter, IterMut, make_hash};
+use crate::map::{HashMap, IntoIter, Iter, IterMut, make_hash};
 use crate::raw::{Bucket, RawTable};
 use core::fmt::{self, Debug};
 use core::hash::{BuildHasher, Hash};
+use core::marker::PhantomData;
 use core::mem;
 
 impl<K, V, S, A> HashMap<K, V, S, A>
@@ -17,7 +18,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut letters = HashMap::new();
     ///
@@ -37,7 +38,7 @@ where
         if let Some(elem) = self.table.find(hash, |q| q.0.eq(&key)) {
             RustcEntry::Occupied(RustcOccupiedEntry {
                 elem,
-                table: &mut self.table,
+                _marker: PhantomData,
             })
         } else {
             // Ideally we would put this in VacantEntry::insert, but Entry is not
@@ -86,7 +87,7 @@ where
     A: Allocator,
 {
     elem: Bucket<(K, V)>,
-    table: &'a mut RawTable<(K, V), A>,
+    _marker: PhantomData<&'a mut RawTable<(K, V), A>>,
 }
 
 unsafe impl<K, V, A> Send for RustcOccupiedEntry<'_, K, V, A>
@@ -136,7 +137,7 @@ impl<'a, K, V, A: Allocator> RustcEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     /// let entry = map.rustc_entry("horseyland").insert(37);
@@ -159,7 +160,7 @@ impl<'a, K, V, A: Allocator> RustcEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     ///
@@ -186,7 +187,7 @@ impl<'a, K, V, A: Allocator> RustcEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, String> = HashMap::new();
     /// let s = "hoho".to_string();
@@ -211,7 +212,7 @@ impl<'a, K, V, A: Allocator> RustcEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     /// assert_eq!(map.rustc_entry("poneyland").key(), &"poneyland");
@@ -230,7 +231,7 @@ impl<'a, K, V, A: Allocator> RustcEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     ///
@@ -267,7 +268,7 @@ impl<'a, K, V: Default, A: Allocator> RustcEntry<'a, K, V, A> {
     ///
     /// ```
     /// # fn main() {
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, Option<u32>> = HashMap::new();
     /// map.rustc_entry("poneyland").or_default();
@@ -293,7 +294,7 @@ impl<'a, K, V, A: Allocator> RustcOccupiedEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     /// map.rustc_entry("poneyland").or_insert(12);
@@ -304,36 +305,13 @@ impl<'a, K, V, A: Allocator> RustcOccupiedEntry<'a, K, V, A> {
         unsafe { &self.elem.as_ref().0 }
     }
 
-    /// Take the ownership of the key and value from the map.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashMap;
-    /// use hashbrown::hash_map::RustcEntry;
-    ///
-    /// let mut map: HashMap<&str, u32> = HashMap::new();
-    /// map.rustc_entry("poneyland").or_insert(12);
-    ///
-    /// if let RustcEntry::Occupied(o) = map.rustc_entry("poneyland") {
-    ///     // We delete the entry from the map.
-    ///     o.remove_entry();
-    /// }
-    ///
-    /// assert_eq!(map.contains_key("poneyland"), false);
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn remove_entry(self) -> (K, V) {
-        unsafe { self.table.remove(self.elem).0 }
-    }
-
     /// Gets a reference to the value in the entry.
     ///
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
-    /// use hashbrown::hash_map::RustcEntry;
+    /// use monotable::HashMap;
+    /// use monotable::hash_map::RustcEntry;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     /// map.rustc_entry("poneyland").or_insert(12);
@@ -357,8 +335,8 @@ impl<'a, K, V, A: Allocator> RustcOccupiedEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
-    /// use hashbrown::hash_map::RustcEntry;
+    /// use monotable::HashMap;
+    /// use monotable::hash_map::RustcEntry;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     /// map.rustc_entry("poneyland").or_insert(12);
@@ -389,8 +367,8 @@ impl<'a, K, V, A: Allocator> RustcOccupiedEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
-    /// use hashbrown::hash_map::RustcEntry;
+    /// use monotable::HashMap;
+    /// use monotable::hash_map::RustcEntry;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     /// map.rustc_entry("poneyland").or_insert(12);
@@ -412,8 +390,8 @@ impl<'a, K, V, A: Allocator> RustcOccupiedEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
-    /// use hashbrown::hash_map::RustcEntry;
+    /// use monotable::HashMap;
+    /// use monotable::hash_map::RustcEntry;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     /// map.rustc_entry("poneyland").or_insert(12);
@@ -429,27 +407,6 @@ impl<'a, K, V, A: Allocator> RustcOccupiedEntry<'a, K, V, A> {
         mem::replace(self.get_mut(), value)
     }
 
-    /// Takes the value out of the entry, and returns it.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashMap;
-    /// use hashbrown::hash_map::RustcEntry;
-    ///
-    /// let mut map: HashMap<&str, u32> = HashMap::new();
-    /// map.rustc_entry("poneyland").or_insert(12);
-    ///
-    /// if let RustcEntry::Occupied(o) = map.rustc_entry("poneyland") {
-    ///     assert_eq!(o.remove(), 12);
-    /// }
-    ///
-    /// assert_eq!(map.contains_key("poneyland"), false);
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn remove(self) -> V {
-        self.remove_entry().1
-    }
 }
 
 impl<'a, K, V, A: Allocator> RustcVacantEntry<'a, K, V, A> {
@@ -459,7 +416,7 @@ impl<'a, K, V, A: Allocator> RustcVacantEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     /// assert_eq!(map.rustc_entry("poneyland").key(), &"poneyland");
@@ -474,8 +431,8 @@ impl<'a, K, V, A: Allocator> RustcVacantEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
-    /// use hashbrown::hash_map::RustcEntry;
+    /// use monotable::HashMap;
+    /// use monotable::hash_map::RustcEntry;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     ///
@@ -494,8 +451,8 @@ impl<'a, K, V, A: Allocator> RustcVacantEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
-    /// use hashbrown::hash_map::RustcEntry;
+    /// use monotable::HashMap;
+    /// use monotable::hash_map::RustcEntry;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     ///
@@ -518,8 +475,8 @@ impl<'a, K, V, A: Allocator> RustcVacantEntry<'a, K, V, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
-    /// use hashbrown::hash_map::RustcEntry;
+    /// use monotable::HashMap;
+    /// use monotable::hash_map::RustcEntry;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     ///
@@ -533,7 +490,7 @@ impl<'a, K, V, A: Allocator> RustcVacantEntry<'a, K, V, A> {
         let bucket = unsafe { self.table.insert_no_grow(self.hash, (self.key, value)) };
         RustcOccupiedEntry {
             elem: bucket,
-            table: self.table,
+            _marker: PhantomData,
         }
     }
 }
@@ -547,14 +504,6 @@ impl<K, V> IterMut<'_, K, V> {
 }
 
 impl<K, V, A: Allocator> IntoIter<K, V, A> {
-    /// Returns a iterator of references over the remaining items.
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn rustc_iter(&self) -> Iter<'_, K, V> {
-        self.iter()
-    }
-}
-
-impl<K, V, A: Allocator> Drain<'_, K, V, A> {
     /// Returns a iterator of references over the remaining items.
     #[cfg_attr(feature = "inline-more", inline)]
     pub fn rustc_iter(&self) -> Iter<'_, K, V> {

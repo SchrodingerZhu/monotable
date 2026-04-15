@@ -1,6 +1,6 @@
 //! Rayon extensions for `HashMap`.
 
-use super::raw::{RawIntoParIter, RawParDrain, RawParIter};
+use super::raw::{RawIntoParIter, RawParIter};
 use crate::HashMap;
 use crate::alloc::{Allocator, Global};
 use core::fmt;
@@ -251,38 +251,6 @@ impl<K: fmt::Debug + Eq + Hash, V: fmt::Debug, A: Allocator> fmt::Debug for Into
     }
 }
 
-/// Parallel draining iterator over entries of a map.
-///
-/// This iterator is created by the [`par_drain`] method on [`HashMap`].
-/// See its documentation for more.
-///
-/// [`par_drain`]: HashMap::par_drain
-pub struct ParDrain<'a, K, V, A: Allocator = Global> {
-    inner: RawParDrain<'a, (K, V), A>,
-}
-
-impl<K: Send, V: Send, A: Allocator + Sync> ParallelIterator for ParDrain<'_, K, V, A> {
-    type Item = (K, V);
-
-    #[cfg_attr(feature = "inline-more", inline)]
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        self.inner.drive_unindexed(consumer)
-    }
-}
-
-impl<K: fmt::Debug + Eq + Hash, V: fmt::Debug, A: Allocator> fmt::Debug for ParDrain<'_, K, V, A> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        ParIter {
-            inner: unsafe { self.inner.par_iter() },
-            marker: PhantomData,
-        }
-        .fmt(f)
-    }
-}
-
 impl<K: Sync, V: Sync, S, A: Allocator> HashMap<K, V, S, A> {
     /// Visits (potentially in parallel) immutably borrowed keys in an arbitrary order.
     #[cfg_attr(feature = "inline-more", inline)]
@@ -313,14 +281,6 @@ impl<K: Send, V: Send, S, A: Allocator> HashMap<K, V, S, A> {
         }
     }
 
-    /// Consumes (potentially in parallel) all values in an arbitrary order,
-    /// while preserving the map's allocated memory for reuse.
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn par_drain(&mut self) -> ParDrain<'_, K, V, A> {
-        ParDrain {
-            inner: self.table.par_drain(),
-        }
-    }
 }
 
 impl<K, V, S, A> HashMap<K, V, S, A>
@@ -554,57 +514,8 @@ mod test_par_map {
     }
 
     #[test]
-    fn test_drain_drops() {
-        let key = AtomicUsize::new(0);
-        let value = AtomicUsize::new(0);
-
-        let mut hm = {
-            let mut hm = HashMap::new();
-
-            assert_eq!(key.load(Ordering::Relaxed), 0);
-            assert_eq!(value.load(Ordering::Relaxed), 0);
-
-            for i in 0..100 {
-                let d1 = Droppable::new(i, &key);
-                let d2 = Droppable::new(i + 100, &value);
-                hm.insert(d1, d2);
-            }
-
-            assert_eq!(key.load(Ordering::Relaxed), 100);
-            assert_eq!(value.load(Ordering::Relaxed), 100);
-
-            hm
-        };
-
-        // By the way, ensure that cloning doesn't screw up the dropping.
-        drop(hm.clone());
-
-        assert_eq!(key.load(Ordering::Relaxed), 100);
-        assert_eq!(value.load(Ordering::Relaxed), 100);
-
-        // Ensure that dropping the drain iterator does not leak anything.
-        drop(hm.clone().par_drain());
-
-        {
-            assert_eq!(key.load(Ordering::Relaxed), 100);
-            assert_eq!(value.load(Ordering::Relaxed), 100);
-
-            // retain only half
-            let _v: Vec<_> = hm.drain().filter(|(key, _)| key.k < 50).collect();
-            assert!(hm.is_empty());
-
-            assert_eq!(key.load(Ordering::Relaxed), 50);
-            assert_eq!(value.load(Ordering::Relaxed), 50);
-        };
-
-        assert_eq!(key.load(Ordering::Relaxed), 0);
-        assert_eq!(value.load(Ordering::Relaxed), 0);
-    }
-
-    #[test]
     fn test_empty_iter() {
         let mut m: HashMap<isize, bool> = HashMap::new();
-        assert_eq!(m.par_drain().count(), 0);
         assert_eq!(m.par_keys().count(), 0);
         assert_eq!(m.par_values().count(), 0);
         assert_eq!(m.par_values_mut().count(), 0);

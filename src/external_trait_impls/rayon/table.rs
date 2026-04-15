@@ -1,6 +1,6 @@
 //! Rayon extensions for `HashTable`.
 
-use super::raw::{RawIntoParIter, RawParDrain, RawParIter};
+use super::raw::{RawIntoParIter, RawParIter};
 use crate::HashTable;
 use crate::alloc::{Allocator, Global};
 use core::fmt;
@@ -123,47 +123,7 @@ impl<T: fmt::Debug, A: Allocator> fmt::Debug for IntoParIter<T, A> {
     }
 }
 
-/// Parallel draining iterator over entries of a map.
-///
-/// This iterator is created by the [`par_drain`] method on [`HashTable`].
-/// See its documentation for more.
-///
-/// [`par_drain`]: HashTable::par_drain
-pub struct ParDrain<'a, T, A: Allocator = Global> {
-    inner: RawParDrain<'a, T, A>,
-}
-
-impl<T: Send, A: Allocator + Sync> ParallelIterator for ParDrain<'_, T, A> {
-    type Item = T;
-
-    #[cfg_attr(feature = "inline-more", inline)]
-    fn drive_unindexed<C>(self, consumer: C) -> C::Result
-    where
-        C: UnindexedConsumer<Self::Item>,
-    {
-        self.inner.drive_unindexed(consumer)
-    }
-}
-
-impl<T: fmt::Debug, A: Allocator> fmt::Debug for ParDrain<'_, T, A> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        ParIter {
-            inner: unsafe { self.inner.par_iter() },
-            marker: PhantomData,
-        }
-        .fmt(f)
-    }
-}
-
 impl<T: Send, A: Allocator> HashTable<T, A> {
-    /// Consumes (potentially in parallel) all values in an arbitrary order,
-    /// while preserving the map's allocated memory for reuse.
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn par_drain(&mut self) -> ParDrain<'_, T, A> {
-        ParDrain {
-            inner: self.raw.par_drain(),
-        }
-    }
 }
 
 impl<T: Send, A: Allocator + Send> IntoParallelIterator for HashTable<T, A> {

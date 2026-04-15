@@ -5,8 +5,8 @@ use crate::{
     alloc::{Allocator, Global},
     control::Tag,
     raw::{
-        Bucket, FullBucketsIndices, RawDrain, RawExtractIf, RawIntoIter, RawIter, RawIterHash,
-        RawIterHashIndices, RawTable,
+        Bucket, FullBucketsIndices, RawIntoIter, RawIter, RawIterHash, RawIterHashIndices,
+        RawTable,
     },
 };
 
@@ -61,7 +61,7 @@ impl<T> HashTable<T, Global> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashTable;
+    /// use monotable::HashTable;
     /// let mut table: HashTable<&str> = HashTable::new();
     /// assert_eq!(table.len(), 0);
     /// assert_eq!(table.capacity(), 0);
@@ -81,7 +81,7 @@ impl<T> HashTable<T, Global> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashTable;
+    /// use monotable::HashTable;
     /// let mut table: HashTable<&str> = HashTable::with_capacity(10);
     /// assert_eq!(table.len(), 0);
     /// assert!(table.capacity() >= 10);
@@ -109,7 +109,7 @@ where
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
     /// use bumpalo::Bump;
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let bump = Bump::new();
@@ -153,7 +153,7 @@ where
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
     /// use bumpalo::Bump;
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let bump = Bump::new();
@@ -208,7 +208,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -245,7 +245,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -270,7 +270,7 @@ where
     /// Returns an `OccupiedEntry` for an entry in the table with the given hash
     /// and which satisfies the equality function passed.
     ///
-    /// This can be used to remove the entry from the table. Call
+    /// This can be used to access the matching occupied entry. Call
     /// [`HashTable::entry`] instead if you wish to insert an entry if the
     /// lookup fails.
     ///
@@ -283,7 +283,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -291,9 +291,9 @@ where
     /// let hasher = |val: &_| hasher.hash_one(val);
     /// table.insert_unique(hasher(&1), (1, "a"), |val| hasher(&val.0));
     /// if let Ok(entry) = table.find_entry(hasher(&1), |val| val.0 == 1) {
-    ///     entry.remove();
+    ///     assert_eq!(entry.get(), &(1, "a"));
     /// }
-    /// assert_eq!(table.find(hasher(&1), |val| val.0 == 1), None);
+    /// assert_eq!(table.find(hasher(&1), |val| val.0 == 1), Some(&(1, "a")));
     /// # }
     /// # fn main() {
     /// #     #[cfg(feature = "nightly")]
@@ -330,7 +330,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -367,7 +367,7 @@ where
     /// Returns an `Entry` for an entry in the table with the given hash
     /// and which satisfies the equality function passed.
     ///
-    /// This can be used to remove the entry from the table, or insert a new
+    /// This can be used to access an existing entry, or insert a new
     /// entry with the given hash if one doesn't already exist.
     ///
     /// This method will call `eq` for all entries with the given hash, but may
@@ -385,8 +385,8 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::hash_table::Entry;
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::hash_table::Entry;
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -395,12 +395,12 @@ where
     /// table.insert_unique(hasher(&1), (1, "a"), |val| hasher(&val.0));
     /// if let Entry::Occupied(entry) = table.entry(hasher(&1), |val| val.0 == 1, |val| hasher(&val.0))
     /// {
-    ///     entry.remove();
+    ///     assert_eq!(entry.get(), &(1, "a"));
     /// }
     /// if let Entry::Vacant(entry) = table.entry(hasher(&2), |val| val.0 == 2, |val| hasher(&val.0)) {
     ///     entry.insert((2, "b"));
     /// }
-    /// assert_eq!(table.find(hasher(&1), |val| val.0 == 1), None);
+    /// assert_eq!(table.find(hasher(&1), |val| val.0 == 1), Some(&(1, "a")));
     /// assert_eq!(table.find(hasher(&2), |val| val.0 == 2), Some(&(2, "b")));
     /// # }
     /// # fn main() {
@@ -436,7 +436,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -452,9 +452,9 @@ where
     ///
     /// let occupied_entry = table.get_bucket_entry(index).unwrap();
     /// assert_eq!(occupied_entry.get(), &(2, 'b'));
-    /// assert_eq!(occupied_entry.remove().0, (2, 'b'));
+    /// assert_eq!(occupied_entry.bucket_index(), index);
     ///
-    /// assert!(table.find(hasher(&2), |val| val.0 == 2).is_none());
+    /// assert_eq!(table.find(hasher(&2), |val| val.0 == 2), Some(&(2, 'b')));
     /// # }
     /// # fn main() {
     /// #     #[cfg(feature = "nightly")]
@@ -492,7 +492,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -529,7 +529,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -569,7 +569,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -603,7 +603,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -647,7 +647,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -685,7 +685,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut v = HashTable::new();
@@ -718,7 +718,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut v = HashTable::new();
@@ -735,77 +735,6 @@ where
     /// ```
     pub fn clear(&mut self) {
         self.raw.clear();
-    }
-
-    /// Shrinks the capacity of the table as much as possible. It will drop
-    /// down as much as possible while maintaining the internal rules
-    /// and possibly leaving some space in accordance with the resize policy.
-    ///
-    /// `hasher` is called if entries need to be moved or copied to a new table.
-    /// This must return the same hash value that each entry was inserted with.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #[cfg(feature = "nightly")]
-    /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
-    /// use std::hash::BuildHasher;
-    ///
-    /// let mut table = HashTable::with_capacity(100);
-    /// let hasher = DefaultHashBuilder::default();
-    /// let hasher = |val: &_| hasher.hash_one(val);
-    /// table.insert_unique(hasher(&1), 1, hasher);
-    /// table.insert_unique(hasher(&2), 2, hasher);
-    /// assert!(table.capacity() >= 100);
-    /// table.shrink_to_fit(hasher);
-    /// assert!(table.capacity() >= 2);
-    /// # }
-    /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
-    /// #     test()
-    /// # }
-    /// ```
-    pub fn shrink_to_fit(&mut self, hasher: impl Fn(&T) -> u64) {
-        self.raw.shrink_to(self.len(), hasher);
-    }
-
-    /// Shrinks the capacity of the table with a lower limit. It will drop
-    /// down no lower than the supplied limit while maintaining the internal rules
-    /// and possibly leaving some space in accordance with the resize policy.
-    ///
-    /// `hasher` is called if entries need to be moved or copied to a new table.
-    /// This must return the same hash value that each entry was inserted with.
-    ///
-    /// Panics if the current capacity is smaller than the supplied
-    /// minimum capacity.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #[cfg(feature = "nightly")]
-    /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
-    /// use std::hash::BuildHasher;
-    ///
-    /// let mut table = HashTable::with_capacity(100);
-    /// let hasher = DefaultHashBuilder::default();
-    /// let hasher = |val: &_| hasher.hash_one(val);
-    /// table.insert_unique(hasher(&1), 1, hasher);
-    /// table.insert_unique(hasher(&2), 2, hasher);
-    /// assert!(table.capacity() >= 100);
-    /// table.shrink_to(10, hasher);
-    /// assert!(table.capacity() >= 10);
-    /// table.shrink_to(0, hasher);
-    /// assert!(table.capacity() >= 2);
-    /// # }
-    /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
-    /// #     test()
-    /// # }
-    /// ```
-    pub fn shrink_to(&mut self, min_capacity: usize, hasher: impl Fn(&T) -> u64) {
-        self.raw.shrink_to(min_capacity, hasher);
     }
 
     /// Reserves capacity for at least `additional` more elements to be inserted
@@ -828,7 +757,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table: HashTable<i32> = HashTable::new();
@@ -863,7 +792,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table: HashTable<i32> = HashTable::new();
@@ -897,7 +826,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -929,7 +858,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashTable;
+    /// use monotable::HashTable;
     /// let table: HashTable<i32> = HashTable::with_capacity(100);
     /// assert!(table.capacity() >= 100);
     /// ```
@@ -944,7 +873,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let hasher = DefaultHashBuilder::default();
@@ -970,7 +899,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let hasher = DefaultHashBuilder::default();
@@ -997,7 +926,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -1032,7 +961,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -1107,7 +1036,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -1145,7 +1074,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -1184,7 +1113,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -1239,7 +1168,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -1266,133 +1195,6 @@ where
         }
     }
 
-    /// Retains only the elements specified by the predicate.
-    ///
-    /// In other words, remove all elements `e` such that `f(&e)` returns `false`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #[cfg(feature = "nightly")]
-    /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
-    /// use std::hash::BuildHasher;
-    ///
-    /// let mut table = HashTable::new();
-    /// let hasher = DefaultHashBuilder::default();
-    /// let hasher = |val: &_| hasher.hash_one(val);
-    /// for x in 1..=6 {
-    ///     table.insert_unique(hasher(&x), x, hasher);
-    /// }
-    /// table.retain(|&mut x| x % 2 == 0);
-    /// assert_eq!(table.len(), 3);
-    /// # }
-    /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
-    /// #     test()
-    /// # }
-    /// ```
-    pub fn retain(&mut self, mut f: impl FnMut(&mut T) -> bool) {
-        // Here we only use `iter` as a temporary, preventing use-after-free
-        unsafe {
-            for item in self.raw.iter() {
-                if !f(item.as_mut()) {
-                    self.raw.erase(item);
-                }
-            }
-        }
-    }
-
-    /// Clears the set, returning all elements in an iterator.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #[cfg(feature = "nightly")]
-    /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
-    /// use std::hash::BuildHasher;
-    ///
-    /// let mut table = HashTable::new();
-    /// let hasher = DefaultHashBuilder::default();
-    /// let hasher = |val: &_| hasher.hash_one(val);
-    /// for x in 1..=3 {
-    ///     table.insert_unique(hasher(&x), x, hasher);
-    /// }
-    /// assert!(!table.is_empty());
-    ///
-    /// // print 1, 2, 3 in an arbitrary order
-    /// for i in table.drain() {
-    ///     println!("{}", i);
-    /// }
-    ///
-    /// assert!(table.is_empty());
-    /// # }
-    /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
-    /// #     test()
-    /// # }
-    /// ```
-    pub fn drain(&mut self) -> Drain<'_, T, A> {
-        Drain {
-            inner: self.raw.drain(),
-        }
-    }
-
-    /// Drains elements which are true under the given predicate,
-    /// and returns an iterator over the removed items.
-    ///
-    /// In other words, move all elements `e` such that `f(&e)` returns `true` out
-    /// into another iterator.
-    ///
-    /// If the returned `ExtractIf` is not exhausted, e.g. because it is dropped without iterating
-    /// or the iteration short-circuits, then the remaining elements will be retained.
-    /// Use [`retain()`] with a negated predicate if you do not need the returned iterator.
-    ///
-    /// [`retain()`]: HashTable::retain
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #[cfg(feature = "nightly")]
-    /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
-    /// use std::hash::BuildHasher;
-    ///
-    /// let mut table = HashTable::new();
-    /// let hasher = DefaultHashBuilder::default();
-    /// let hasher = |val: &_| hasher.hash_one(val);
-    /// for x in 0..8 {
-    ///     table.insert_unique(hasher(&x), x, hasher);
-    /// }
-    /// let drained: Vec<i32> = table.extract_if(|&mut v| v % 2 == 0).collect();
-    ///
-    /// let mut evens = drained.into_iter().collect::<Vec<_>>();
-    /// let mut odds = table.into_iter().collect::<Vec<_>>();
-    /// evens.sort();
-    /// odds.sort();
-    ///
-    /// assert_eq!(evens, vec![0, 2, 4, 6]);
-    /// assert_eq!(odds, vec![1, 3, 5, 7]);
-    /// # }
-    /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
-    /// #     test()
-    /// # }
-    /// ```
-    pub fn extract_if<F>(&mut self, f: F) -> ExtractIf<'_, T, F, A>
-    where
-        F: FnMut(&mut T) -> bool,
-    {
-        ExtractIf {
-            f,
-            inner: RawExtractIf {
-                iter: unsafe { self.raw.iter() },
-                table: &mut self.raw,
-            },
-        }
-    }
-
     /// Attempts to get mutable references to `N` values in the map at once.
     ///
     /// The `eq` argument should be a closure such that `eq(i, k)` returns true if `k` is equal to
@@ -1410,8 +1212,8 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::hash_table::Entry;
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::hash_table::Entry;
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut libraries: HashTable<(&str, u32)> = HashTable::new();
@@ -1447,7 +1249,7 @@ where
     /// ```should_panic
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// # use hashbrown::{HashTable, DefaultHashBuilder};
+    /// # use monotable::{HashTable, DefaultHashBuilder};
     /// # use std::hash::BuildHasher;
     ///
     /// let mut libraries: HashTable<(&str, u32)> = HashTable::new();
@@ -1512,8 +1314,8 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::hash_table::Entry;
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::hash_table::Entry;
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut libraries: HashTable<(&str, u32)> = HashTable::new();
@@ -1661,8 +1463,8 @@ where
 /// ```
 /// # #[cfg(feature = "nightly")]
 /// # fn test() {
-/// use hashbrown::hash_table::{Entry, OccupiedEntry};
-/// use hashbrown::{HashTable, DefaultHashBuilder};
+/// use monotable::hash_table::{Entry, OccupiedEntry};
+/// use monotable::{HashTable, DefaultHashBuilder};
 /// use std::hash::BuildHasher;
 ///
 /// let mut table = HashTable::new();
@@ -1713,8 +1515,8 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::hash_table::{Entry, OccupiedEntry};
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::hash_table::{Entry, OccupiedEntry};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -1743,8 +1545,8 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::hash_table::{Entry, OccupiedEntry};
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::hash_table::{Entry, OccupiedEntry};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::<&str>::new();
@@ -1785,7 +1587,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table: HashTable<&str> = HashTable::new();
@@ -1822,7 +1624,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table: HashTable<&str> = HashTable::new();
@@ -1867,7 +1669,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table: HashTable<String> = HashTable::new();
@@ -1902,7 +1704,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table: HashTable<(&str, u32)> = HashTable::new();
@@ -1967,8 +1769,8 @@ where
 /// ```
 /// # #[cfg(feature = "nightly")]
 /// # fn test() {
-/// use hashbrown::hash_table::{Entry, OccupiedEntry};
-/// use hashbrown::{HashTable, DefaultHashBuilder};
+/// use monotable::hash_table::{Entry, OccupiedEntry};
+/// use monotable::{HashTable, DefaultHashBuilder};
 /// use std::hash::BuildHasher;
 ///
 /// let mut table = HashTable::new();
@@ -1992,15 +1794,15 @@ where
 ///
 /// assert_eq!(table.len(), 3);
 ///
-/// // Existing key (take)
+/// // Existing key
 /// match table.entry(hasher(&"c"), |&x| x == "c", hasher) {
 ///     Entry::Vacant(_) => unreachable!(),
 ///     Entry::Occupied(view) => {
-///         assert_eq!(view.remove().0, "c");
+///         assert_eq!(view.get(), &"c");
 ///     }
 /// }
-/// assert_eq!(table.find(hasher(&"c"), |&x| x == "c"), None);
-/// assert_eq!(table.len(), 2);
+/// assert_eq!(table.find(hasher(&"c"), |&x| x == "c"), Some(&"c"));
+/// assert_eq!(table.len(), 3);
 /// # }
 /// # fn main() {
 /// #     #[cfg(feature = "nightly")]
@@ -2040,56 +1842,6 @@ impl<'a, T, A> OccupiedEntry<'a, T, A>
 where
     A: Allocator,
 {
-    /// Takes the value out of the entry, and returns it along with a
-    /// `VacantEntry` that can be used to insert another value with the same
-    /// hash as the one that was just removed.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #[cfg(feature = "nightly")]
-    /// # fn test() {
-    /// use hashbrown::hash_table::Entry;
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
-    /// use std::hash::BuildHasher;
-    ///
-    /// let mut table: HashTable<&str> = HashTable::new();
-    /// let hasher = DefaultHashBuilder::default();
-    /// let hasher = |val: &_| hasher.hash_one(val);
-    /// // The table is empty
-    /// assert!(table.is_empty() && table.capacity() == 0);
-    ///
-    /// table.insert_unique(hasher(&"poneyland"), "poneyland", hasher);
-    /// let capacity_before_remove = table.capacity();
-    ///
-    /// if let Entry::Occupied(o) = table.entry(hasher(&"poneyland"), |&x| x == "poneyland", hasher) {
-    ///     assert_eq!(o.remove().0, "poneyland");
-    /// }
-    ///
-    /// assert!(table
-    ///     .find(hasher(&"poneyland"), |&x| x == "poneyland")
-    ///     .is_none());
-    /// // Now table hold none elements but capacity is equal to the old one
-    /// assert!(table.len() == 0 && table.capacity() == capacity_before_remove);
-    /// # }
-    /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
-    /// #     test()
-    /// # }
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn remove(self) -> (T, VacantEntry<'a, T, A>) {
-        let (val, index, tag) = unsafe { self.table.raw.remove_tagged(self.bucket) };
-        (
-            val,
-            VacantEntry {
-                tag,
-                index,
-                table: self.table,
-            },
-        )
-    }
-
     /// Gets a reference to the value in the entry.
     ///
     /// # Examples
@@ -2097,8 +1849,8 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::hash_table::Entry;
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::hash_table::Entry;
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table: HashTable<&str> = HashTable::new();
@@ -2133,8 +1885,8 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::hash_table::Entry;
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::hash_table::Entry;
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table: HashTable<(&str, u32)> = HashTable::new();
@@ -2186,8 +1938,8 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::hash_table::Entry;
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::hash_table::Entry;
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table: HashTable<(&str, u32)> = HashTable::new();
@@ -2245,7 +1997,7 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table = HashTable::new();
@@ -2278,78 +2030,6 @@ where
         unsafe { self.table.raw.bucket_index(&self.bucket) }
     }
 
-    /// Provides owned access to the value of the entry and allows to replace or
-    /// remove it based on the value of the returned option.
-    ///
-    /// The hash of the new item should be the same as the old item.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # #[cfg(feature = "nightly")]
-    /// # fn test() {
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
-    /// use hashbrown::hash_table::Entry;
-    /// use std::hash::BuildHasher;
-    ///
-    /// let mut table = HashTable::new();
-    /// let hasher = DefaultHashBuilder::default();
-    /// let hasher = |(key, _): &_| hasher.hash_one(key);
-    /// table.insert_unique(hasher(&("poneyland", 42)), ("poneyland", 42), hasher);
-    ///
-    /// let entry = match table.entry(hasher(&("poneyland", 42)), |entry| entry.0 == "poneyland", hasher) {
-    ///     Entry::Occupied(e) => unsafe {
-    ///         e.replace_entry_with(|(k, v)| {
-    ///             assert_eq!(k, "poneyland");
-    ///             assert_eq!(v, 42);
-    ///             Some(("poneyland", v + 1))
-    ///         })
-    ///     }
-    ///     Entry::Vacant(_) => panic!(),
-    /// };
-    ///
-    /// match entry {
-    ///     Entry::Occupied(e) => {
-    ///         assert_eq!(e.get(), &("poneyland", 43));
-    ///     }
-    ///     Entry::Vacant(_) => panic!(),
-    /// }
-    ///
-    /// let entry = match table.entry(hasher(&("poneyland", 43)), |entry| entry.0 == "poneyland", hasher) {
-    ///     Entry::Occupied(e) => unsafe { e.replace_entry_with(|(_k, _v)| None) },
-    ///     Entry::Vacant(_) => panic!(),
-    /// };
-    ///
-    /// match entry {
-    ///     Entry::Vacant(e) => {
-    ///         // nice!
-    ///     }
-    ///     Entry::Occupied(_) => panic!(),
-    /// }
-    ///
-    /// assert!(table.is_empty());
-    /// # }
-    /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
-    /// #     test()
-    /// # }
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn replace_entry_with<F>(self, f: F) -> Entry<'a, T, A>
-    where
-        F: FnOnce(T) -> Option<T>,
-    {
-        unsafe {
-            match self.table.raw.replace_bucket_with(self.bucket.clone(), f) {
-                None => Entry::Occupied(self),
-                Some(tag) => Entry::Vacant(VacantEntry {
-                    tag,
-                    index: self.bucket_index(),
-                    table: self.table,
-                }),
-            }
-        }
-    }
 }
 
 /// A view into a vacant entry in a `HashTable`.
@@ -2360,8 +2040,8 @@ where
 /// ```
 /// # #[cfg(feature = "nightly")]
 /// # fn test() {
-/// use hashbrown::hash_table::{Entry, VacantEntry};
-/// use hashbrown::{HashTable, DefaultHashBuilder};
+/// use monotable::hash_table::{Entry, VacantEntry};
+/// use monotable::{HashTable, DefaultHashBuilder};
 /// use std::hash::BuildHasher;
 ///
 /// let mut table: HashTable<&str> = HashTable::new();
@@ -2418,8 +2098,8 @@ where
     /// ```
     /// # #[cfg(feature = "nightly")]
     /// # fn test() {
-    /// use hashbrown::hash_table::Entry;
-    /// use hashbrown::{HashTable, DefaultHashBuilder};
+    /// use monotable::hash_table::Entry;
+    /// use monotable::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
     ///
     /// let mut table: HashTable<&str> = HashTable::new();
@@ -2473,8 +2153,8 @@ where
 /// ```
 /// # #[cfg(feature = "nightly")]
 /// # fn test() {
-/// use hashbrown::hash_table::{AbsentEntry, Entry};
-/// use hashbrown::{HashTable, DefaultHashBuilder};
+/// use monotable::hash_table::{AbsentEntry, Entry};
+/// use monotable::{HashTable, DefaultHashBuilder};
 /// use std::hash::BuildHasher;
 ///
 /// let mut table: HashTable<&str> = HashTable::new();
@@ -2700,7 +2380,7 @@ where
 ///
 /// ```rust
 /// use core::marker::PhantomData;
-/// use hashbrown::hash_table;
+/// use monotable::hash_table;
 ///
 /// pub struct IterMut<'a, K, V> {
 ///     inner: hash_table::UnsafeIter<'a, (K, V)>,
@@ -3100,89 +2780,6 @@ where
         f.debug_list().entries(self.iter()).finish()
     }
 }
-
-/// A draining iterator over the items of a `HashTable`.
-///
-/// This `struct` is created by the [`drain`] method on [`HashTable`].
-/// See its documentation for more.
-///
-/// [`drain`]: HashTable::drain
-pub struct Drain<'a, T, A: Allocator = Global> {
-    inner: RawDrain<'a, T, A>,
-}
-impl<'a, T, A: Allocator> Drain<'a, T, A> {
-    /// Returns a iterator of references over the remaining items.
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn iter(&self) -> Iter<'_, T> {
-        Iter {
-            inner: self.inner.iter(),
-            marker: PhantomData,
-        }
-    }
-}
-
-impl<T, A: Allocator> Iterator for Drain<'_, T, A> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<T> {
-        self.inner.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
-
-    fn fold<B, F>(self, init: B, f: F) -> B
-    where
-        Self: Sized,
-        F: FnMut(B, Self::Item) -> B,
-    {
-        self.inner.fold(init, f)
-    }
-}
-
-impl<T, A: Allocator> ExactSizeIterator for Drain<'_, T, A> {
-    fn len(&self) -> usize {
-        self.inner.len()
-    }
-}
-
-impl<T, A: Allocator> FusedIterator for Drain<'_, T, A> {}
-
-impl<T: fmt::Debug, A: Allocator> fmt::Debug for Drain<'_, T, A> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.iter()).finish()
-    }
-}
-
-/// A draining iterator over entries of a `HashTable` which don't satisfy the predicate `f`.
-///
-/// This `struct` is created by [`HashTable::extract_if`]. See its
-/// documentation for more.
-#[must_use = "Iterators are lazy unless consumed"]
-pub struct ExtractIf<'a, T, F, A: Allocator = Global> {
-    f: F,
-    inner: RawExtractIf<'a, T, A>,
-}
-
-impl<T, F, A: Allocator> Iterator for ExtractIf<'_, T, F, A>
-where
-    F: FnMut(&mut T) -> bool,
-{
-    type Item = T;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next(|val| (self.f)(val))
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, self.inner.iter.size_hint().1)
-    }
-}
-
-impl<T, F, A: Allocator> FusedIterator for ExtractIf<'_, T, F, A> where F: FnMut(&mut T) -> bool {}
 
 #[cfg(test)]
 mod tests {

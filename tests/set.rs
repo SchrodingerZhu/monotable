@@ -1,12 +1,12 @@
 #![expect(missing_docs)] // https://github.com/rust-lang/rust/issues/137561
 #![cfg(not(miri))] // FIXME: takes too long
 
-use hashbrown::HashSet;
+use monotable::HashSet;
 use rand::{Rng, SeedableRng, distr::Alphanumeric, rngs::SmallRng};
 use std::iter;
 
 #[test]
-fn test_hashset_insert_remove() {
+fn test_hashset_insert_cycles() {
     let mut m: HashSet<Vec<char>> = HashSet::new();
     let seed = u64::from_le_bytes(*b"testseed");
 
@@ -27,9 +27,7 @@ fn test_hashset_insert_remove() {
             assert_eq!(m.contains(x), false);
             assert_eq!(m.insert(x.clone()), true);
         }
-        for (i, x) in tx.iter().enumerate() {
-            println!("removing {i} {x:?}");
-            assert_eq!(m.remove(x), true);
-        }
+        assert_eq!(m.len(), tx.len());
+        m.clear();
     }
 }

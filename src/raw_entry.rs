@@ -4,6 +4,7 @@ use crate::map::{HashMap, equivalent, make_hash, make_hasher};
 use crate::raw::{Bucket, RawTable};
 use core::fmt::{self, Debug};
 use core::hash::{BuildHasher, Hash};
+use core::marker::PhantomData;
 use core::mem;
 
 impl<K, V, S, A: Allocator> HashMap<K, V, S, A> {
@@ -43,7 +44,7 @@ impl<K, V, S, A: Allocator> HashMap<K, V, S, A> {
     ///
     /// ```
     /// use core::hash::{BuildHasher, Hash};
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// let mut map = HashMap::new();
     /// map.extend([("a", 100), ("b", 200), ("c", 300)]);
@@ -70,17 +71,6 @@ impl<K, V, S, A: Allocator> HashMap<K, V, S, A> {
     /// assert_eq!(map[&"a"], 1111);
     /// assert_eq!(map.len(), 3);
     ///
-    /// // Existing key (take)
-    /// let hash = compute_hash(map.hasher(), &"c");
-    /// match map.raw_entry_mut().from_key_hashed_nocheck(hash, &"c") {
-    ///     RawEntryMut::Vacant(_) => unreachable!(),
-    ///     RawEntryMut::Occupied(view) => {
-    ///         assert_eq!(view.remove_entry(), ("c", 300));
-    ///     }
-    /// }
-    /// assert_eq!(map.raw_entry().from_key(&"c"), None);
-    /// assert_eq!(map.len(), 2);
-    ///
     /// // Nonexistent key (insert and update)
     /// let key = "d";
     /// let hash = compute_hash(map.hasher(), &key);
@@ -93,16 +83,8 @@ impl<K, V, S, A: Allocator> HashMap<K, V, S, A> {
     ///     }
     /// }
     /// assert_eq!(map[&"d"], 40000);
-    /// assert_eq!(map.len(), 3);
+    /// assert_eq!(map.len(), 4);
     ///
-    /// match map.raw_entry_mut().from_hash(hash, |q| *q == key) {
-    ///     RawEntryMut::Vacant(_) => unreachable!(),
-    ///     RawEntryMut::Occupied(view) => {
-    ///         assert_eq!(view.remove_entry(), ("d", 40000));
-    ///     }
-    /// }
-    /// assert_eq!(map.get(&"d"), None);
-    /// assert_eq!(map.len(), 2);
     /// ```
     #[cfg_attr(feature = "inline-more", inline)]
     pub fn raw_entry_mut(&mut self) -> RawEntryBuilderMut<'_, K, V, S, A> {
@@ -129,7 +111,7 @@ impl<K, V, S, A: Allocator> HashMap<K, V, S, A> {
     ///
     /// ```
     /// use core::hash::{BuildHasher, Hash};
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map = HashMap::new();
     /// map.extend([("a", 100), ("b", 200), ("c", 300)]);
@@ -168,8 +150,8 @@ impl<K, V, S, A: Allocator> HashMap<K, V, S, A> {
 /// # Examples
 ///
 /// ```
-/// use hashbrown::hash_map::{RawEntryBuilderMut, RawEntryMut::Vacant, RawEntryMut::Occupied};
-/// use hashbrown::HashMap;
+/// use monotable::hash_map::{RawEntryBuilderMut, RawEntryMut::Vacant, RawEntryMut::Occupied};
+/// use monotable::HashMap;
 /// use core::hash::{BuildHasher, Hash};
 ///
 /// let mut map = HashMap::new();
@@ -233,7 +215,7 @@ pub struct RawEntryBuilderMut<'a, K, V, S, A: Allocator = Global> {
 ///
 /// ```
 /// use core::hash::{BuildHasher, Hash};
-/// use hashbrown::hash_map::{HashMap, RawEntryMut, RawOccupiedEntryMut};
+/// use monotable::hash_map::{HashMap, RawEntryMut, RawOccupiedEntryMut};
 ///
 /// let mut map = HashMap::new();
 /// map.extend([('a', 1), ('b', 2), ('c', 3)]);
@@ -307,7 +289,7 @@ pub enum RawEntryMut<'a, K, V, S, A: Allocator = Global> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::{hash_map::RawEntryMut, HashMap};
+    /// use monotable::{hash_map::RawEntryMut, HashMap};
     /// let mut map: HashMap<_, _> = [("a", 100), ("b", 200)].into();
     ///
     /// match map.raw_entry_mut().from_key(&"a") {
@@ -321,7 +303,7 @@ pub enum RawEntryMut<'a, K, V, S, A: Allocator = Global> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::{hash_map::RawEntryMut, HashMap};
+    /// use monotable::{hash_map::RawEntryMut, HashMap};
     /// let mut map: HashMap<&str, i32> = HashMap::new();
     ///
     /// match map.raw_entry_mut().from_key("a") {
@@ -339,7 +321,7 @@ pub enum RawEntryMut<'a, K, V, S, A: Allocator = Global> {
 ///
 /// ```
 /// use core::hash::{BuildHasher, Hash};
-/// use hashbrown::hash_map::{HashMap, RawEntryMut, RawOccupiedEntryMut};
+/// use monotable::hash_map::{HashMap, RawEntryMut, RawOccupiedEntryMut};
 ///
 /// let mut map = HashMap::new();
 /// map.extend([("a", 10), ("b", 20), ("c", 30)]);
@@ -369,31 +351,10 @@ pub enum RawEntryMut<'a, K, V, S, A: Allocator = Global> {
 /// assert_eq!(map[&"a"], 1111);
 /// assert_eq!(map.len(), 3);
 ///
-/// // Existing key (take)
-/// let hash = compute_hash(map.hasher(), &"c");
-/// match map.raw_entry_mut().from_key_hashed_nocheck(hash, &"c") {
-///     RawEntryMut::Vacant(_) => unreachable!(),
-///     RawEntryMut::Occupied(view) => {
-///         assert_eq!(view.remove_entry(), ("c", 30));
-///     }
-/// }
-/// assert_eq!(map.raw_entry().from_key(&"c"), None);
-/// assert_eq!(map.len(), 2);
-///
-/// let hash = compute_hash(map.hasher(), &"b");
-/// match map.raw_entry_mut().from_hash(hash, |q| *q == "b") {
-///     RawEntryMut::Vacant(_) => unreachable!(),
-///     RawEntryMut::Occupied(view) => {
-///         assert_eq!(view.remove_entry(), ("b", 20));
-///     }
-/// }
-/// assert_eq!(map.get(&"b"), None);
-/// assert_eq!(map.len(), 1);
 /// ```
 pub struct RawOccupiedEntryMut<'a, K, V, S, A: Allocator = Global> {
     elem: Bucket<(K, V)>,
-    table: &'a mut RawTable<(K, V), A>,
-    hash_builder: &'a S,
+    _marker: PhantomData<(&'a mut RawTable<(K, V), A>, &'a S)>,
 }
 
 unsafe impl<K, V, S, A> Send for RawOccupiedEntryMut<'_, K, V, S, A>
@@ -420,7 +381,7 @@ where
 ///
 /// ```
 /// use core::hash::{BuildHasher, Hash};
-/// use hashbrown::hash_map::{HashMap, RawEntryMut, RawVacantEntryMut};
+/// use monotable::hash_map::{HashMap, RawEntryMut, RawVacantEntryMut};
 ///
 /// let mut map = HashMap::<&str, i32>::new();
 ///
@@ -473,7 +434,7 @@ pub struct RawVacantEntryMut<'a, K, V, S, A: Allocator = Global> {
 /// # Examples
 ///
 /// ```
-/// use hashbrown::hash_map::{HashMap, RawEntryBuilder};
+/// use monotable::hash_map::{HashMap, RawEntryBuilder};
 /// use core::hash::{BuildHasher, Hash};
 ///
 /// let mut map = HashMap::new();
@@ -508,7 +469,7 @@ impl<'a, K, V, S, A: Allocator> RawEntryBuilderMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     /// let key = "a";
@@ -532,7 +493,7 @@ impl<'a, K, V, S, A: Allocator> RawEntryBuilderMut<'a, K, V, S, A> {
     ///
     /// ```
     /// use core::hash::{BuildHasher, Hash};
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// fn compute_hash<K: Hash + ?Sized, S: BuildHasher>(hash_builder: &S, key: &K) -> u64 {
     ///     use core::hash::Hasher;
@@ -564,7 +525,7 @@ impl<'a, K, V, S, A: Allocator> RawEntryBuilderMut<'a, K, V, S, A> {
     ///
     /// ```
     /// use core::hash::{BuildHasher, Hash};
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// fn compute_hash<K: Hash + ?Sized, S: BuildHasher>(hash_builder: &S, key: &K) -> u64 {
     ///     use core::hash::Hasher;
@@ -596,8 +557,7 @@ impl<'a, K, V, S, A: Allocator> RawEntryBuilderMut<'a, K, V, S, A> {
         match self.map.table.find(hash, |(k, _)| is_match(k)) {
             Some(elem) => RawEntryMut::Occupied(RawOccupiedEntryMut {
                 elem,
-                table: &mut self.map.table,
-                hash_builder: &self.map.hash_builder,
+                _marker: PhantomData,
             }),
             None => RawEntryMut::Vacant(RawVacantEntryMut {
                 table: &mut self.map.table,
@@ -613,7 +573,7 @@ impl<'a, K, V, S, A: Allocator> RawEntryBuilder<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let map: HashMap<&str, u32> = [("a", 100), ("b", 200)].into();
     /// let key = "a";
@@ -635,7 +595,7 @@ impl<'a, K, V, S, A: Allocator> RawEntryBuilder<'a, K, V, S, A> {
     ///
     /// ```
     /// use core::hash::{BuildHasher, Hash};
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// fn compute_hash<K: Hash + ?Sized, S: BuildHasher>(hash_builder: &S, key: &K) -> u64 {
     ///     use core::hash::Hasher;
@@ -674,7 +634,7 @@ impl<'a, K, V, S, A: Allocator> RawEntryBuilder<'a, K, V, S, A> {
     ///
     /// ```
     /// use core::hash::{BuildHasher, Hash};
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// fn compute_hash<K: Hash + ?Sized, S: BuildHasher>(hash_builder: &S, key: &K) -> u64 {
     ///     use core::hash::Hasher;
@@ -703,12 +663,11 @@ impl<'a, K, V, S, A: Allocator> RawEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     /// let entry = map.raw_entry_mut().from_key("horseyland").insert("horseyland", 37);
-    ///
-    /// assert_eq!(entry.remove_entry(), ("horseyland", 37));
+    /// assert_eq!(entry.get(), &37);
     /// ```
     #[cfg_attr(feature = "inline-more", inline)]
     pub fn insert(self, key: K, value: V) -> RawOccupiedEntryMut<'a, K, V, S, A>
@@ -731,7 +690,7 @@ impl<'a, K, V, S, A: Allocator> RawEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     ///
@@ -759,7 +718,7 @@ impl<'a, K, V, S, A: Allocator> RawEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, String> = HashMap::new();
     ///
@@ -791,7 +750,7 @@ impl<'a, K, V, S, A: Allocator> RawEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashMap;
+    /// use monotable::HashMap;
     ///
     /// let mut map: HashMap<&str, u32> = HashMap::new();
     ///
@@ -824,71 +783,6 @@ impl<'a, K, V, S, A: Allocator> RawEntryMut<'a, K, V, S, A> {
         }
     }
 
-    /// Provides shared access to the key and owned access to the value of
-    /// an occupied entry and allows to replace or remove it based on the
-    /// value of the returned option.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashMap;
-    /// use hashbrown::hash_map::RawEntryMut;
-    ///
-    /// let mut map: HashMap<&str, u32> = HashMap::new();
-    ///
-    /// let entry = map
-    ///     .raw_entry_mut()
-    ///     .from_key("poneyland")
-    ///     .and_replace_entry_with(|_k, _v| panic!());
-    ///
-    /// match entry {
-    ///     RawEntryMut::Vacant(_) => {},
-    ///     RawEntryMut::Occupied(_) => panic!(),
-    /// }
-    ///
-    /// map.insert("poneyland", 42);
-    ///
-    /// let entry = map
-    ///     .raw_entry_mut()
-    ///     .from_key("poneyland")
-    ///     .and_replace_entry_with(|k, v| {
-    ///         assert_eq!(k, &"poneyland");
-    ///         assert_eq!(v, 42);
-    ///         Some(v + 1)
-    ///     });
-    ///
-    /// match entry {
-    ///     RawEntryMut::Occupied(e) => {
-    ///         assert_eq!(e.key(), &"poneyland");
-    ///         assert_eq!(e.get(), &43);
-    ///     },
-    ///     RawEntryMut::Vacant(_) => panic!(),
-    /// }
-    ///
-    /// assert_eq!(map["poneyland"], 43);
-    ///
-    /// let entry = map
-    ///     .raw_entry_mut()
-    ///     .from_key("poneyland")
-    ///     .and_replace_entry_with(|_k, _v| None);
-    ///
-    /// match entry {
-    ///     RawEntryMut::Vacant(_) => {},
-    ///     RawEntryMut::Occupied(_) => panic!(),
-    /// }
-    ///
-    /// assert!(!map.contains_key("poneyland"));
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn and_replace_entry_with<F>(self, f: F) -> Self
-    where
-        F: FnOnce(&K, V) -> Option<V>,
-    {
-        match self {
-            RawEntryMut::Occupied(entry) => entry.replace_entry_with(f),
-            RawEntryMut::Vacant(_) => self,
-        }
-    }
 }
 
 impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
@@ -897,7 +791,7 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// let mut map: HashMap<&str, u32> = [("a", 100), ("b", 200)].into();
     ///
@@ -916,7 +810,7 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     /// use std::rc::Rc;
     ///
     /// let key_one = Rc::new("a");
@@ -948,7 +842,7 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     /// use std::rc::Rc;
     ///
     /// let key_one = Rc::new("a");
@@ -981,7 +875,7 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// let mut map: HashMap<&str, u32> = [("a", 100), ("b", 200)].into();
     ///
@@ -1001,7 +895,7 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// let mut map: HashMap<&str, u32> = [("a", 100), ("b", 200)].into();
     ///
@@ -1025,7 +919,7 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// let mut map: HashMap<&str, u32> = [("a", 100), ("b", 200)].into();
     ///
@@ -1046,7 +940,7 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// let mut map: HashMap<&str, u32> = [("a", 100), ("b", 200)].into();
     ///
@@ -1068,7 +962,7 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     /// use std::rc::Rc;
     ///
     /// let key_one = Rc::new("a");
@@ -1105,7 +999,7 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     /// use std::rc::Rc;
     ///
     /// let key_one = Rc::new("a");
@@ -1145,7 +1039,7 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// let mut map: HashMap<&str, u32> = [("a", 100), ("b", 200)].into();
     ///
@@ -1166,7 +1060,7 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     /// use std::rc::Rc;
     ///
     /// let key_one = Rc::new("a");
@@ -1193,101 +1087,6 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
         mem::replace(self.key_mut(), key)
     }
 
-    /// Takes the value out of the entry, and returns it.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
-    ///
-    /// let mut map: HashMap<&str, u32> = [("a", 100), ("b", 200)].into();
-    ///
-    /// match map.raw_entry_mut().from_key(&"a") {
-    ///     RawEntryMut::Vacant(_) => panic!(),
-    ///     RawEntryMut::Occupied(o) => assert_eq!(o.remove(), 100),
-    /// }
-    /// assert_eq!(map.get(&"a"), None);
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn remove(self) -> V {
-        self.remove_entry().1
-    }
-
-    /// Take the ownership of the key and value from the map.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
-    ///
-    /// let mut map: HashMap<&str, u32> = [("a", 100), ("b", 200)].into();
-    ///
-    /// match map.raw_entry_mut().from_key(&"a") {
-    ///     RawEntryMut::Vacant(_) => panic!(),
-    ///     RawEntryMut::Occupied(o) => assert_eq!(o.remove_entry(), ("a", 100)),
-    /// }
-    /// assert_eq!(map.get(&"a"), None);
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn remove_entry(self) -> (K, V) {
-        unsafe { self.table.remove(self.elem).0 }
-    }
-
-    /// Provides shared access to the key and owned access to the value of
-    /// the entry and allows to replace or remove it based on the
-    /// value of the returned option.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
-    ///
-    /// let mut map: HashMap<&str, u32> = [("a", 100), ("b", 200)].into();
-    ///
-    /// let raw_entry = match map.raw_entry_mut().from_key(&"a") {
-    ///     RawEntryMut::Vacant(_) => panic!(),
-    ///     RawEntryMut::Occupied(o) => o.replace_entry_with(|k, v| {
-    ///         assert_eq!(k, &"a");
-    ///         assert_eq!(v, 100);
-    ///         Some(v + 900)
-    ///     }),
-    /// };
-    /// let raw_entry = match raw_entry {
-    ///     RawEntryMut::Vacant(_) => panic!(),
-    ///     RawEntryMut::Occupied(o) => o.replace_entry_with(|k, v| {
-    ///         assert_eq!(k, &"a");
-    ///         assert_eq!(v, 1000);
-    ///         None
-    ///     }),
-    /// };
-    /// match raw_entry {
-    ///     RawEntryMut::Vacant(_) => { },
-    ///     RawEntryMut::Occupied(_) => panic!(),
-    /// };
-    /// assert_eq!(map.get(&"a"), None);
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn replace_entry_with<F>(self, f: F) -> RawEntryMut<'a, K, V, S, A>
-    where
-        F: FnOnce(&K, V) -> Option<V>,
-    {
-        unsafe {
-            let tag = self
-                .table
-                .replace_bucket_with(self.elem.clone(), |(key, value)| {
-                    f(&key, value).map(|new_value| (key, new_value))
-                });
-
-            if tag.is_none() {
-                RawEntryMut::Occupied(self)
-            } else {
-                RawEntryMut::Vacant(RawVacantEntryMut {
-                    table: self.table,
-                    hash_builder: self.hash_builder,
-                })
-            }
-        }
-    }
 }
 
 impl<'a, K, V, S, A: Allocator> RawVacantEntryMut<'a, K, V, S, A> {
@@ -1297,7 +1096,7 @@ impl<'a, K, V, S, A: Allocator> RawVacantEntryMut<'a, K, V, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// let mut map: HashMap<&str, u32> = [("a", 100), ("b", 200)].into();
     ///
@@ -1325,7 +1124,7 @@ impl<'a, K, V, S, A: Allocator> RawVacantEntryMut<'a, K, V, S, A> {
     ///
     /// ```
     /// use core::hash::{BuildHasher, Hash};
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// fn compute_hash<K: Hash + ?Sized, S: BuildHasher>(hash_builder: &S, key: &K) -> u64 {
     ///     use core::hash::Hasher;
@@ -1368,7 +1167,7 @@ impl<'a, K, V, S, A: Allocator> RawVacantEntryMut<'a, K, V, S, A> {
     ///
     /// ```
     /// use core::hash::{BuildHasher, Hash};
-    /// use hashbrown::hash_map::{HashMap, RawEntryMut};
+    /// use monotable::hash_map::{HashMap, RawEntryMut};
     ///
     /// fn make_hasher<K, S>(hash_builder: &S) -> impl Fn(&K) -> u64 + '_
     /// where
@@ -1429,8 +1228,7 @@ impl<'a, K, V, S, A: Allocator> RawVacantEntryMut<'a, K, V, S, A> {
         );
         RawOccupiedEntryMut {
             elem,
-            table: self.table,
-            hash_builder: self.hash_builder,
+            _marker: PhantomData,
         }
     }
 }
@@ -1468,262 +1266,5 @@ impl<K, V, S, A: Allocator> Debug for RawVacantEntryMut<'_, K, V, S, A> {
 impl<K, V, S, A: Allocator> Debug for RawEntryBuilder<'_, K, V, S, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RawEntryBuilder").finish()
-    }
-}
-
-#[cfg(test)]
-mod test_map {
-    use super::HashMap;
-    use super::RawEntryMut;
-
-    #[test]
-    fn test_raw_occupied_entry_replace_entry_with() {
-        let mut a = HashMap::new();
-
-        let key = "a key";
-        let value = "an initial value";
-        let new_value = "a new value";
-
-        let entry = a
-            .raw_entry_mut()
-            .from_key(&key)
-            .insert(key, value)
-            .replace_entry_with(|k, v| {
-                assert_eq!(k, &key);
-                assert_eq!(v, value);
-                Some(new_value)
-            });
-
-        match entry {
-            RawEntryMut::Occupied(e) => {
-                assert_eq!(e.key(), &key);
-                assert_eq!(e.get(), &new_value);
-            }
-            RawEntryMut::Vacant(_) => panic!(),
-        }
-
-        assert_eq!(a[key], new_value);
-        assert_eq!(a.len(), 1);
-
-        let entry = match a.raw_entry_mut().from_key(&key) {
-            RawEntryMut::Occupied(e) => e.replace_entry_with(|k, v| {
-                assert_eq!(k, &key);
-                assert_eq!(v, new_value);
-                None
-            }),
-            RawEntryMut::Vacant(_) => panic!(),
-        };
-
-        match entry {
-            RawEntryMut::Vacant(_) => {}
-            RawEntryMut::Occupied(_) => panic!(),
-        }
-
-        assert!(!a.contains_key(key));
-        assert_eq!(a.len(), 0);
-    }
-
-    #[test]
-    fn test_raw_entry_and_replace_entry_with() {
-        let mut a = HashMap::new();
-
-        let key = "a key";
-        let value = "an initial value";
-        let new_value = "a new value";
-
-        let entry = a
-            .raw_entry_mut()
-            .from_key(&key)
-            .and_replace_entry_with(|_, _| panic!());
-
-        match entry {
-            RawEntryMut::Vacant(_) => {}
-            RawEntryMut::Occupied(_) => panic!(),
-        }
-
-        a.insert(key, value);
-
-        let entry = a
-            .raw_entry_mut()
-            .from_key(&key)
-            .and_replace_entry_with(|k, v| {
-                assert_eq!(k, &key);
-                assert_eq!(v, value);
-                Some(new_value)
-            });
-
-        match entry {
-            RawEntryMut::Occupied(e) => {
-                assert_eq!(e.key(), &key);
-                assert_eq!(e.get(), &new_value);
-            }
-            RawEntryMut::Vacant(_) => panic!(),
-        }
-
-        assert_eq!(a[key], new_value);
-        assert_eq!(a.len(), 1);
-
-        let entry = a
-            .raw_entry_mut()
-            .from_key(&key)
-            .and_replace_entry_with(|k, v| {
-                assert_eq!(k, &key);
-                assert_eq!(v, new_value);
-                None
-            });
-
-        match entry {
-            RawEntryMut::Vacant(_) => {}
-            RawEntryMut::Occupied(_) => panic!(),
-        }
-
-        assert!(!a.contains_key(key));
-        assert_eq!(a.len(), 0);
-    }
-
-    #[test]
-    fn test_raw_entry() {
-        use super::RawEntryMut::{Occupied, Vacant};
-
-        let xs = [(1_i32, 10_i32), (2, 20), (3, 30), (4, 40), (5, 50), (6, 60)];
-
-        let mut map: HashMap<_, _> = xs.iter().copied().collect();
-
-        let compute_hash = |map: &HashMap<i32, i32>, k: i32| -> u64 {
-            super::make_hash::<i32, _>(map.hasher(), &k)
-        };
-
-        // Existing key (insert)
-        match map.raw_entry_mut().from_key(&1) {
-            Vacant(_) => unreachable!(),
-            Occupied(mut view) => {
-                assert_eq!(view.get(), &10);
-                assert_eq!(view.insert(100), 10);
-            }
-        }
-        let hash1 = compute_hash(&map, 1);
-        assert_eq!(map.raw_entry().from_key(&1).unwrap(), (&1, &100));
-        assert_eq!(
-            map.raw_entry().from_hash(hash1, |k| *k == 1).unwrap(),
-            (&1, &100)
-        );
-        assert_eq!(
-            map.raw_entry().from_key_hashed_nocheck(hash1, &1).unwrap(),
-            (&1, &100)
-        );
-        assert_eq!(map.len(), 6);
-
-        // Existing key (update)
-        match map.raw_entry_mut().from_key(&2) {
-            Vacant(_) => unreachable!(),
-            Occupied(mut view) => {
-                let v = view.get_mut();
-                let new_v = (*v) * 10;
-                *v = new_v;
-            }
-        }
-        let hash2 = compute_hash(&map, 2);
-        assert_eq!(map.raw_entry().from_key(&2).unwrap(), (&2, &200));
-        assert_eq!(
-            map.raw_entry().from_hash(hash2, |k| *k == 2).unwrap(),
-            (&2, &200)
-        );
-        assert_eq!(
-            map.raw_entry().from_key_hashed_nocheck(hash2, &2).unwrap(),
-            (&2, &200)
-        );
-        assert_eq!(map.len(), 6);
-
-        // Existing key (take)
-        let hash3 = compute_hash(&map, 3);
-        match map.raw_entry_mut().from_key_hashed_nocheck(hash3, &3) {
-            Vacant(_) => unreachable!(),
-            Occupied(view) => {
-                assert_eq!(view.remove_entry(), (3, 30));
-            }
-        }
-        assert_eq!(map.raw_entry().from_key(&3), None);
-        assert_eq!(map.raw_entry().from_hash(hash3, |k| *k == 3), None);
-        assert_eq!(map.raw_entry().from_key_hashed_nocheck(hash3, &3), None);
-        assert_eq!(map.len(), 5);
-
-        // Nonexistent key (insert)
-        match map.raw_entry_mut().from_key(&10) {
-            Occupied(_) => unreachable!(),
-            Vacant(view) => {
-                assert_eq!(view.insert(10, 1000), (&mut 10, &mut 1000));
-            }
-        }
-        assert_eq!(map.raw_entry().from_key(&10).unwrap(), (&10, &1000));
-        assert_eq!(map.len(), 6);
-
-        // Ensure all lookup methods produce equivalent results.
-        for k in 0..12 {
-            let hash = compute_hash(&map, k);
-            let v = map.get(&k).copied();
-            let kv = v.as_ref().map(|v| (&k, v));
-
-            assert_eq!(map.raw_entry().from_key(&k), kv);
-            assert_eq!(map.raw_entry().from_hash(hash, |q| *q == k), kv);
-            assert_eq!(map.raw_entry().from_key_hashed_nocheck(hash, &k), kv);
-
-            match map.raw_entry_mut().from_key(&k) {
-                Occupied(o) => assert_eq!(Some(o.get_key_value()), kv),
-                Vacant(_) => assert_eq!(v, None),
-            }
-            match map.raw_entry_mut().from_key_hashed_nocheck(hash, &k) {
-                Occupied(o) => assert_eq!(Some(o.get_key_value()), kv),
-                Vacant(_) => assert_eq!(v, None),
-            }
-            match map.raw_entry_mut().from_hash(hash, |q| *q == k) {
-                Occupied(o) => assert_eq!(Some(o.get_key_value()), kv),
-                Vacant(_) => assert_eq!(v, None),
-            }
-        }
-    }
-
-    #[test]
-    fn test_key_without_hash_impl() {
-        #[derive(Debug)]
-        struct IntWrapper(u64);
-
-        let mut m: HashMap<IntWrapper, (), ()> = HashMap::default();
-        {
-            assert!(m.raw_entry().from_hash(0, |k| k.0 == 0).is_none());
-        }
-        {
-            let vacant_entry = match m.raw_entry_mut().from_hash(0, |k| k.0 == 0) {
-                RawEntryMut::Occupied(..) => panic!("Found entry for key 0"),
-                RawEntryMut::Vacant(e) => e,
-            };
-            vacant_entry.insert_with_hasher(0, IntWrapper(0), (), |k| k.0);
-        }
-        {
-            assert!(m.raw_entry().from_hash(0, |k| k.0 == 0).is_some());
-            assert!(m.raw_entry().from_hash(1, |k| k.0 == 1).is_none());
-            assert!(m.raw_entry().from_hash(2, |k| k.0 == 2).is_none());
-        }
-        {
-            let vacant_entry = match m.raw_entry_mut().from_hash(1, |k| k.0 == 1) {
-                RawEntryMut::Occupied(..) => panic!("Found entry for key 1"),
-                RawEntryMut::Vacant(e) => e,
-            };
-            vacant_entry.insert_with_hasher(1, IntWrapper(1), (), |k| k.0);
-        }
-        {
-            assert!(m.raw_entry().from_hash(0, |k| k.0 == 0).is_some());
-            assert!(m.raw_entry().from_hash(1, |k| k.0 == 1).is_some());
-            assert!(m.raw_entry().from_hash(2, |k| k.0 == 2).is_none());
-        }
-        {
-            let occupied_entry = match m.raw_entry_mut().from_hash(0, |k| k.0 == 0) {
-                RawEntryMut::Occupied(e) => e,
-                RawEntryMut::Vacant(..) => panic!("Couldn't find entry for key 0"),
-            };
-            occupied_entry.remove();
-        }
-        assert!(m.raw_entry().from_hash(0, |k| k.0 == 0).is_none());
-        assert!(m.raw_entry().from_hash(1, |k| k.0 == 1).is_some());
-        assert!(m.raw_entry().from_hash(2, |k| k.0 == 2).is_none());
     }
 }

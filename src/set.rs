@@ -3,12 +3,11 @@ use core::cell::UnsafeCell;
 use core::fmt;
 use core::hash::{BuildHasher, Hash};
 use core::iter::{Chain, FusedIterator};
-use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Sub, SubAssign};
+use core::ops::{BitAnd, BitOr, BitOrAssign, BitXor, Sub};
 
 use super::map::{self, HashMap, Keys};
 use crate::DefaultHashBuilder;
 use crate::alloc::{Allocator, Global};
-use crate::raw::RawExtractIf;
 
 // Future Optimization (FIXME!)
 // =============================
@@ -45,7 +44,7 @@ use crate::raw::RawExtractIf;
 /// # Examples
 ///
 /// ```
-/// use hashbrown::HashSet;
+/// use monotable::HashSet;
 /// // Type inference lets us omit an explicit type signature (which
 /// // would be `HashSet<String>` in this example).
 /// let mut books = HashSet::new();
@@ -62,9 +61,6 @@ use crate::raw::RawExtractIf;
 ///              books.len());
 /// }
 ///
-/// // Remove a book.
-/// books.remove("The Odyssey");
-///
 /// // Iterate over everything.
 /// for book in &books {
 ///     println!("{}", book);
@@ -76,7 +72,7 @@ use crate::raw::RawExtractIf;
 /// future be implied by [`Eq`].
 ///
 /// ```
-/// use hashbrown::HashSet;
+/// use monotable::HashSet;
 /// #[derive(Hash, Eq, PartialEq, Debug)]
 /// struct Viking {
 ///     name: String,
@@ -99,7 +95,7 @@ use crate::raw::RawExtractIf;
 /// A `HashSet` with fixed list of elements can be initialized from an array:
 ///
 /// ```
-/// use hashbrown::HashSet;
+/// use monotable::HashSet;
 ///
 /// let viking_names: HashSet<&'static str> =
 ///     [ "Einar", "Olaf", "Harald" ].into_iter().collect();
@@ -145,7 +141,7 @@ impl<T> HashSet<T, DefaultHashBuilder> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let set: HashSet<i32> = HashSet::new();
     /// ```
     #[must_use]
@@ -175,7 +171,7 @@ impl<T> HashSet<T, DefaultHashBuilder> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let set: HashSet<i32> = HashSet::with_capacity(10);
     /// assert!(set.capacity() >= 10);
     /// ```
@@ -209,7 +205,7 @@ impl<T: Hash + Eq, A: Allocator> HashSet<T, DefaultHashBuilder, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let set: HashSet<i32> = HashSet::new();
     /// ```
     #[must_use]
@@ -239,7 +235,7 @@ impl<T: Hash + Eq, A: Allocator> HashSet<T, DefaultHashBuilder, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let set: HashSet<i32> = HashSet::with_capacity(10);
     /// assert!(set.capacity() >= 10);
     /// ```
@@ -258,7 +254,7 @@ impl<T, S, A: Allocator> HashSet<T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let set: HashSet<i32> = HashSet::with_capacity(100);
     /// assert!(set.capacity() >= 100);
     /// ```
@@ -273,7 +269,7 @@ impl<T, S, A: Allocator> HashSet<T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let mut set = HashSet::new();
     /// set.insert("a");
     /// set.insert("b");
@@ -295,7 +291,7 @@ impl<T, S, A: Allocator> HashSet<T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut v = HashSet::new();
     /// assert_eq!(v.len(), 0);
@@ -312,7 +308,7 @@ impl<T, S, A: Allocator> HashSet<T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut v = HashSet::new();
     /// assert!(v.is_empty());
@@ -328,95 +324,12 @@ impl<T, S, A: Allocator> HashSet<T, S, A> {
     ///
     /// # Examples
     ///
-    /// ```
-    /// use hashbrown::HashSet;
-    ///
-    /// let mut set: HashSet<_> = [1, 2, 3].into_iter().collect();
-    /// assert!(!set.is_empty());
-    ///
-    /// // print 1, 2, 3 in an arbitrary order
-    /// for i in set.drain() {
-    ///     println!("{}", i);
-    /// }
-    ///
-    /// assert!(set.is_empty());
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn drain(&mut self) -> Drain<'_, T, A> {
-        Drain {
-            iter: self.map.drain(),
-        }
-    }
-
-    /// Retains only the elements specified by the predicate.
-    ///
-    /// In other words, remove all elements `e` such that `f(&e)` returns `false`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashSet;
-    ///
-    /// let xs = [1,2,3,4,5,6];
-    /// let mut set: HashSet<i32> = xs.into_iter().collect();
-    /// set.retain(|&k| k % 2 == 0);
-    /// assert_eq!(set.len(), 3);
-    /// ```
-    pub fn retain<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&T) -> bool,
-    {
-        self.map.retain(|k, _| f(k));
-    }
-
-    /// Drains elements which are true under the given predicate,
-    /// and returns an iterator over the removed items.
-    ///
-    /// In other words, move all elements `e` such that `f(&e)` returns `true` out
-    /// into another iterator.
-    ///
-    /// If the returned `ExtractIf` is not exhausted, e.g. because it is dropped without iterating
-    /// or the iteration short-circuits, then the remaining elements will be retained.
-    /// Use [`retain()`] with a negated predicate if you do not need the returned iterator.
-    ///
-    /// [`retain()`]: HashSet::retain
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashSet;
-    ///
-    /// let mut set: HashSet<i32> = (0..8).collect();
-    /// let drained: HashSet<i32> = set.extract_if(|v| v % 2 == 0).collect();
-    ///
-    /// let mut evens = drained.into_iter().collect::<Vec<_>>();
-    /// let mut odds = set.into_iter().collect::<Vec<_>>();
-    /// evens.sort();
-    /// odds.sort();
-    ///
-    /// assert_eq!(evens, vec![0, 2, 4, 6]);
-    /// assert_eq!(odds, vec![1, 3, 5, 7]);
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn extract_if<F>(&mut self, f: F) -> ExtractIf<'_, T, F, A>
-    where
-        F: FnMut(&T) -> bool,
-    {
-        ExtractIf {
-            f,
-            inner: RawExtractIf {
-                iter: unsafe { self.map.table.iter() },
-                table: &mut self.map.table,
-            },
-        }
-    }
-
     /// Clears the set, removing all values.
     ///
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut v = HashSet::new();
     /// v.insert(1);
@@ -452,8 +365,8 @@ impl<T, S> HashSet<T, S, Global> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
-    /// use hashbrown::DefaultHashBuilder;
+    /// use monotable::HashSet;
+    /// use monotable::DefaultHashBuilder;
     ///
     /// let s = DefaultHashBuilder::default();
     /// let mut set = HashSet::with_hasher(s);
@@ -490,8 +403,8 @@ impl<T, S> HashSet<T, S, Global> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
-    /// use hashbrown::DefaultHashBuilder;
+    /// use monotable::HashSet;
+    /// use monotable::DefaultHashBuilder;
     ///
     /// let s = DefaultHashBuilder::default();
     /// let mut set = HashSet::with_capacity_and_hasher(10, s);
@@ -538,8 +451,8 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
-    /// use hashbrown::DefaultHashBuilder;
+    /// use monotable::HashSet;
+    /// use monotable::DefaultHashBuilder;
     ///
     /// let s = DefaultHashBuilder::default();
     /// let mut set = HashSet::with_hasher(s);
@@ -576,8 +489,8 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
-    /// use hashbrown::DefaultHashBuilder;
+    /// use monotable::HashSet;
+    /// use monotable::DefaultHashBuilder;
     ///
     /// let s = DefaultHashBuilder::default();
     /// let mut set = HashSet::with_capacity_and_hasher(10, s);
@@ -596,8 +509,8 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
-    /// use hashbrown::DefaultHashBuilder;
+    /// use monotable::HashSet;
+    /// use monotable::DefaultHashBuilder;
     ///
     /// let hasher = DefaultHashBuilder::default();
     /// let set: HashSet<i32> = HashSet::with_hasher(hasher);
@@ -630,7 +543,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let mut set: HashSet<i32> = HashSet::new();
     /// set.reserve(10);
     /// assert!(set.capacity() >= 10);
@@ -652,7 +565,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let mut set: HashSet<i32> = HashSet::new();
     /// set.try_reserve(10).expect("why is the test harness OOMing on 10 bytes?");
     /// ```
@@ -661,60 +574,13 @@ where
         self.map.try_reserve(additional)
     }
 
-    /// Shrinks the capacity of the set as much as possible. It will drop
-    /// down as much as possible while maintaining the internal rules
-    /// and possibly leaving some space in accordance with the resize policy.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashSet;
-    ///
-    /// let mut set = HashSet::with_capacity(100);
-    /// set.insert(1);
-    /// set.insert(2);
-    /// assert!(set.capacity() >= 100);
-    /// set.shrink_to_fit();
-    /// assert!(set.capacity() >= 2);
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn shrink_to_fit(&mut self) {
-        self.map.shrink_to_fit();
-    }
-
-    /// Shrinks the capacity of the set with a lower limit. It will drop
-    /// down no lower than the supplied limit while maintaining the internal rules
-    /// and possibly leaving some space in accordance with the resize policy.
-    ///
-    /// Panics if the current capacity is smaller than the supplied
-    /// minimum capacity.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashSet;
-    ///
-    /// let mut set = HashSet::with_capacity(100);
-    /// set.insert(1);
-    /// set.insert(2);
-    /// assert!(set.capacity() >= 100);
-    /// set.shrink_to(10);
-    /// assert!(set.capacity() >= 10);
-    /// set.shrink_to(0);
-    /// assert!(set.capacity() >= 2);
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn shrink_to(&mut self, min_capacity: usize) {
-        self.map.shrink_to(min_capacity);
-    }
-
     /// Visits the values representing the difference,
     /// i.e., the values that are in `self` but not in `other`.
     ///
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let a: HashSet<_> = [1, 2, 3].into_iter().collect();
     /// let b: HashSet<_> = [4, 2, 3, 4].into_iter().collect();
     ///
@@ -745,7 +611,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let a: HashSet<_> = [1, 2, 3].into_iter().collect();
     /// let b: HashSet<_> = [4, 2, 3, 4].into_iter().collect();
     ///
@@ -773,7 +639,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let a: HashSet<_> = [1, 2, 3].into_iter().collect();
     /// let b: HashSet<_> = [4, 2, 3, 4].into_iter().collect();
     ///
@@ -804,7 +670,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let a: HashSet<_> = [1, 2, 3].into_iter().collect();
     /// let b: HashSet<_> = [4, 2, 3, 4].into_iter().collect();
     ///
@@ -839,7 +705,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let set: HashSet<_> = [1, 2, 3].into_iter().collect();
     /// assert_eq!(set.contains(&1), true);
@@ -863,7 +729,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let set: HashSet<_> = [1, 2, 3].into_iter().collect();
     /// assert_eq!(set.get(&2), Some(&2));
@@ -888,7 +754,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut set: HashSet<_> = [1, 2, 3].into_iter().collect();
     /// assert_eq!(set.len(), 3);
@@ -912,7 +778,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut set: HashSet<String> = ["cat", "dog", "horse"]
     ///     .iter().map(|&pet| pet.to_owned()).collect();
@@ -928,7 +794,7 @@ where
     /// The following example will panic because the new value doesn't match.
     ///
     /// ```should_panic
-    /// let mut set = hashbrown::HashSet::new();
+    /// let mut set = monotable::HashSet::new();
     /// set.get_or_insert_with("rust", |_| String::new());
     /// ```
     #[cfg_attr(feature = "inline-more", inline)]
@@ -950,33 +816,21 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
-    /// use hashbrown::hash_set::Entry::*;
+    /// use monotable::HashSet;
+    /// use monotable::hash_set::Entry::*;
     ///
-    /// let mut singles = HashSet::new();
+    /// let mut seen = HashSet::new();
     /// let mut dupes = HashSet::new();
     ///
     /// for ch in "a short treatise on fungi".chars() {
-    ///     if let Vacant(dupe_entry) = dupes.entry(ch) {
-    ///         // We haven't already seen a duplicate, so
-    ///         // check if we've at least seen it once.
-    ///         match singles.entry(ch) {
-    ///             Vacant(single_entry) => {
-    ///                 // We found a new character for the first time.
-    ///                 single_entry.insert();
-    ///             }
-    ///             Occupied(single_entry) => {
-    ///                 // We've already seen this once, "move" it to dupes.
-    ///                 single_entry.remove();
-    ///                 dupe_entry.insert();
-    ///             }
-    ///         }
+    ///     if !seen.insert(ch) {
+    ///         dupes.insert(ch);
     ///     }
     /// }
     ///
-    /// assert!(!singles.contains(&'t') && dupes.contains(&'t'));
-    /// assert!(singles.contains(&'u') && !dupes.contains(&'u'));
-    /// assert!(!singles.contains(&'v') && !dupes.contains(&'v'));
+    /// assert!(dupes.contains(&'t'));
+    /// assert!(!dupes.contains(&'u'));
+    /// assert!(!dupes.contains(&'v'));
     /// ```
     #[cfg_attr(feature = "inline-more", inline)]
     pub fn entry(&mut self, value: T) -> Entry<'_, T, S, A> {
@@ -992,7 +846,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let a: HashSet<_> = [1, 2, 3].into_iter().collect();
     /// let mut b = HashSet::new();
@@ -1013,7 +867,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let sup: HashSet<_> = [1, 2, 3].into_iter().collect();
     /// let mut set = HashSet::new();
@@ -1034,7 +888,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let sub: HashSet<_> = [1, 2].into_iter().collect();
     /// let mut set = HashSet::new();
@@ -1062,7 +916,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut set = HashSet::new();
     ///
@@ -1109,7 +963,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut set = HashSet::new();
     /// set.insert(Vec::<i32>::new());
@@ -1147,52 +1001,6 @@ where
     ///
     /// # Examples
     ///
-    /// ```
-    /// use hashbrown::HashSet;
-    ///
-    /// let mut set = HashSet::new();
-    ///
-    /// set.insert(2);
-    /// assert_eq!(set.remove(&2), true);
-    /// assert_eq!(set.remove(&2), false);
-    /// ```
-    ///
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn remove<Q>(&mut self, value: &Q) -> bool
-    where
-        Q: Hash + Equivalent<T> + ?Sized,
-    {
-        self.map.remove(value).is_some()
-    }
-
-    /// Removes and returns the value in the set, if any, that is equal to the given one.
-    ///
-    /// The value may be any borrowed form of the set's value type, but
-    /// [`Hash`] and [`Eq`] on the borrowed form *must* match those for
-    /// the value type.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashSet;
-    ///
-    /// let mut set: HashSet<_> = [1, 2, 3].into_iter().collect();
-    /// assert_eq!(set.take(&2), Some(2));
-    /// assert_eq!(set.take(&2), None);
-    /// ```
-    ///
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn take<Q>(&mut self, value: &Q) -> Option<T>
-    where
-        Q: Hash + Equivalent<T> + ?Sized,
-    {
-        // Avoid `Option::map` because it bloats LLVM IR.
-        match self.map.remove_entry(value) {
-            Some((k, _)) => Some(k),
-            None => None,
-        }
-    }
-
     /// Returns the total amount of memory allocated internally by the hash
     /// set, in bytes.
     ///
@@ -1270,7 +1078,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let set1 = HashSet::from([1, 2, 3, 4]);
     /// let set2: HashSet<_> = [1, 2, 3, 4].into();
@@ -1356,7 +1164,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let a: HashSet<_> = vec![1, 2, 3].into_iter().collect();
     /// let b: HashSet<_> = vec![3, 4, 5].into_iter().collect();
@@ -1389,7 +1197,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let a: HashSet<_> = vec![1, 2, 3].into_iter().collect();
     /// let b: HashSet<_> = vec![2, 3, 4].into_iter().collect();
@@ -1422,7 +1230,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let a: HashSet<_> = vec![1, 2, 3].into_iter().collect();
     /// let b: HashSet<_> = vec![3, 4, 5].into_iter().collect();
@@ -1455,7 +1263,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let a: HashSet<_> = vec![1, 2, 3].into_iter().collect();
     /// let b: HashSet<_> = vec![3, 4, 5].into_iter().collect();
@@ -1486,7 +1294,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut a: HashSet<_> = vec![1, 2, 3].into_iter().collect();
     /// let b: HashSet<_> = vec![3, 4, 5].into_iter().collect();
@@ -1510,114 +1318,6 @@ where
     }
 }
 
-impl<T, S, A> BitAndAssign<&HashSet<T, S, A>> for HashSet<T, S, A>
-where
-    T: Eq + Hash + Clone,
-    S: BuildHasher,
-    A: Allocator,
-{
-    /// Modifies this set to contain the intersection of `self` and `rhs`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashSet;
-    ///
-    /// let mut a: HashSet<_> = vec![1, 2, 3].into_iter().collect();
-    /// let b: HashSet<_> = vec![2, 3, 4].into_iter().collect();
-    ///
-    /// a &= &b;
-    ///
-    /// let mut i = 0;
-    /// let expected = [2, 3];
-    /// for x in &a {
-    ///     assert!(expected.contains(x));
-    ///     i += 1;
-    /// }
-    /// assert_eq!(i, expected.len());
-    /// ```
-    fn bitand_assign(&mut self, rhs: &HashSet<T, S, A>) {
-        self.retain(|item| rhs.contains(item));
-    }
-}
-
-impl<T, S, A> BitXorAssign<&HashSet<T, S, A>> for HashSet<T, S, A>
-where
-    T: Eq + Hash + Clone,
-    S: BuildHasher,
-    A: Allocator,
-{
-    /// Modifies this set to contain the symmetric difference of `self` and `rhs`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashSet;
-    ///
-    /// let mut a: HashSet<_> = vec![1, 2, 3].into_iter().collect();
-    /// let b: HashSet<_> = vec![3, 4, 5].into_iter().collect();
-    ///
-    /// a ^= &b;
-    ///
-    /// let mut i = 0;
-    /// let expected = [1, 2, 4, 5];
-    /// for x in &a {
-    ///     assert!(expected.contains(x));
-    ///     i += 1;
-    /// }
-    /// assert_eq!(i, expected.len());
-    /// ```
-    fn bitxor_assign(&mut self, rhs: &HashSet<T, S, A>) {
-        for item in rhs {
-            match self.map.entry_ref(item) {
-                map::EntryRef::Occupied(entry) => {
-                    entry.remove();
-                }
-                map::EntryRef::Vacant(entry) => {
-                    entry.insert(());
-                }
-            }
-        }
-    }
-}
-
-impl<T, S, A> SubAssign<&HashSet<T, S, A>> for HashSet<T, S, A>
-where
-    T: Eq + Hash + Clone,
-    S: BuildHasher,
-    A: Allocator,
-{
-    /// Modifies this set to contain the difference of `self` and `rhs`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashSet;
-    ///
-    /// let mut a: HashSet<_> = vec![1, 2, 3].into_iter().collect();
-    /// let b: HashSet<_> = vec![3, 4, 5].into_iter().collect();
-    ///
-    /// a -= &b;
-    ///
-    /// let mut i = 0;
-    /// let expected = [1, 2];
-    /// for x in &a {
-    ///     assert!(expected.contains(x));
-    ///     i += 1;
-    /// }
-    /// assert_eq!(i, expected.len());
-    /// ```
-    fn sub_assign(&mut self, rhs: &HashSet<T, S, A>) {
-        if rhs.len() < self.len() {
-            for item in rhs {
-                self.remove(item);
-            }
-        } else {
-            self.retain(|item| !rhs.contains(item));
-        }
-    }
-}
-
 /// An iterator over the items of a `HashSet`.
 ///
 /// This `struct` is created by the [`iter`] method on [`HashSet`].
@@ -1636,28 +1336,6 @@ pub struct Iter<'a, K> {
 /// [`into_iter`]: HashSet::into_iter
 pub struct IntoIter<K, A: Allocator = Global> {
     iter: map::IntoIter<K, (), A>,
-}
-
-/// A draining iterator over the items of a `HashSet`.
-///
-/// This `struct` is created by the [`drain`] method on [`HashSet`].
-/// See its documentation for more.
-///
-/// [`drain`]: HashSet::drain
-pub struct Drain<'a, K, A: Allocator = Global> {
-    iter: map::Drain<'a, K, (), A>,
-}
-
-/// A draining iterator over entries of a `HashSet` which don't satisfy the predicate `f`.
-///
-/// This `struct` is created by the [`extract_if`] method on [`HashSet`]. See its
-/// documentation for more.
-///
-/// [`extract_if`]: HashSet::extract_if
-#[must_use = "Iterators are lazy unless consumed"]
-pub struct ExtractIf<'a, K, F, A: Allocator = Global> {
-    f: F,
-    inner: RawExtractIf<'a, (K, ()), A>,
 }
 
 /// A lazy iterator producing elements in the intersection of `HashSet`s.
@@ -1727,7 +1405,7 @@ impl<T, S, A: Allocator> IntoIterator for HashSet<T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     /// let mut set = HashSet::new();
     /// set.insert("a".to_string());
     /// set.insert("b".to_string());
@@ -1844,66 +1522,6 @@ impl<K: fmt::Debug, A: Allocator> fmt::Debug for IntoIter<K, A> {
         f.debug_list().entries(entries_iter).finish()
     }
 }
-
-impl<K, A: Allocator> Iterator for Drain<'_, K, A> {
-    type Item = K;
-
-    #[cfg_attr(feature = "inline-more", inline)]
-    fn next(&mut self) -> Option<K> {
-        // Avoid `Option::map` because it bloats LLVM IR.
-        match self.iter.next() {
-            Some((k, _)) => Some(k),
-            None => None,
-        }
-    }
-    #[cfg_attr(feature = "inline-more", inline)]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
-    }
-    #[cfg_attr(feature = "inline-more", inline)]
-    fn fold<B, F>(self, init: B, mut f: F) -> B
-    where
-        Self: Sized,
-        F: FnMut(B, Self::Item) -> B,
-    {
-        self.iter.fold(init, |acc, (k, ())| f(acc, k))
-    }
-}
-impl<K, A: Allocator> ExactSizeIterator for Drain<'_, K, A> {
-    #[cfg_attr(feature = "inline-more", inline)]
-    fn len(&self) -> usize {
-        self.iter.len()
-    }
-}
-impl<K, A: Allocator> FusedIterator for Drain<'_, K, A> {}
-
-impl<K: fmt::Debug, A: Allocator> fmt::Debug for Drain<'_, K, A> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let entries_iter = self.iter.iter().map(|(k, _)| k);
-        f.debug_list().entries(entries_iter).finish()
-    }
-}
-
-impl<K, F, A: Allocator> Iterator for ExtractIf<'_, K, F, A>
-where
-    F: FnMut(&K) -> bool,
-{
-    type Item = K;
-
-    #[cfg_attr(feature = "inline-more", inline)]
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next(|&mut (ref k, ())| (self.f)(k))
-            .map(|(k, ())| k)
-    }
-
-    #[inline]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (0, self.inner.iter.size_hint().1)
-    }
-}
-
-impl<K, F, A: Allocator> FusedIterator for ExtractIf<'_, K, F, A> where F: FnMut(&K) -> bool {}
 
 impl<T, S, A: Allocator> Clone for Intersection<'_, T, S, A> {
     #[cfg_attr(feature = "inline-more", inline)]
@@ -2164,7 +1782,7 @@ where
 /// # Examples
 ///
 /// ```
-/// use hashbrown::hash_set::{Entry, HashSet, OccupiedEntry};
+/// use monotable::hash_set::{Entry, HashSet, OccupiedEntry};
 ///
 /// let mut set = HashSet::new();
 /// set.extend(["a", "b", "c"]);
@@ -2199,7 +1817,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_set::{Entry, HashSet};
+    /// use monotable::hash_set::{Entry, HashSet};
     /// let mut set: HashSet<_> = ["a", "b"].into();
     ///
     /// match set.entry("a") {
@@ -2214,7 +1832,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_set::{Entry, HashSet};
+    /// use monotable::hash_set::{Entry, HashSet};
     /// let mut set: HashSet<&str> = HashSet::new();
     ///
     /// match set.entry("a") {
@@ -2240,7 +1858,7 @@ impl<T: fmt::Debug, S, A: Allocator> fmt::Debug for Entry<'_, T, S, A> {
 /// # Examples
 ///
 /// ```
-/// use hashbrown::hash_set::{Entry, HashSet, OccupiedEntry};
+/// use monotable::hash_set::{Entry, HashSet, OccupiedEntry};
 ///
 /// let mut set = HashSet::new();
 /// set.extend(["a", "b", "c"]);
@@ -2258,15 +1876,6 @@ impl<T: fmt::Debug, S, A: Allocator> fmt::Debug for Entry<'_, T, S, A> {
 ///
 /// assert_eq!(set.len(), 3);
 ///
-/// // Existing key (take)
-/// match set.entry("c") {
-///     Entry::Vacant(_) => unreachable!(),
-///     Entry::Occupied(view) => {
-///         assert_eq!(view.remove(), "c");
-///     }
-/// }
-/// assert_eq!(set.get(&"c"), None);
-/// assert_eq!(set.len(), 2);
 /// ```
 pub struct OccupiedEntry<'a, T, S, A: Allocator = Global> {
     inner: map::OccupiedEntry<'a, T, (), S, A>,
@@ -2286,7 +1895,7 @@ impl<T: fmt::Debug, S, A: Allocator> fmt::Debug for OccupiedEntry<'_, T, S, A> {
 /// # Examples
 ///
 /// ```
-/// use hashbrown::hash_set::{Entry, HashSet, VacantEntry};
+/// use monotable::hash_set::{Entry, HashSet, VacantEntry};
 ///
 /// let mut set = HashSet::<&str>::new();
 ///
@@ -2320,7 +1929,7 @@ impl<'a, T, S, A: Allocator> Entry<'a, T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut set: HashSet<&str> = HashSet::new();
     /// let entry = set.entry("horseyland").insert();
@@ -2344,7 +1953,7 @@ impl<'a, T, S, A: Allocator> Entry<'a, T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut set: HashSet<&str> = HashSet::new();
     ///
@@ -2373,7 +1982,7 @@ impl<'a, T, S, A: Allocator> Entry<'a, T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut set: HashSet<&str> = HashSet::new();
     /// set.entry("poneyland").or_insert();
@@ -2397,7 +2006,7 @@ impl<T, S, A: Allocator> OccupiedEntry<'_, T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_set::{Entry, HashSet};
+    /// use monotable::hash_set::{Entry, HashSet};
     ///
     /// let mut set: HashSet<&str> = HashSet::new();
     /// set.entry("poneyland").or_insert();
@@ -2412,34 +2021,6 @@ impl<T, S, A: Allocator> OccupiedEntry<'_, T, S, A> {
         self.inner.key()
     }
 
-    /// Takes the value out of the entry, and returns it.
-    /// Keeps the allocated memory for reuse.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use hashbrown::HashSet;
-    /// use hashbrown::hash_set::Entry;
-    ///
-    /// let mut set: HashSet<&str> = HashSet::new();
-    /// // The set is empty
-    /// assert!(set.is_empty() && set.capacity() == 0);
-    ///
-    /// set.entry("poneyland").or_insert();
-    /// let capacity_before_remove = set.capacity();
-    ///
-    /// if let Entry::Occupied(o) = set.entry("poneyland") {
-    ///     assert_eq!(o.remove(), "poneyland");
-    /// }
-    ///
-    /// assert_eq!(set.contains("poneyland"), false);
-    /// // Now set hold none elements but capacity is equal to the old one
-    /// assert!(set.len() == 0 && set.capacity() == capacity_before_remove);
-    /// ```
-    #[cfg_attr(feature = "inline-more", inline)]
-    pub fn remove(self) -> T {
-        self.inner.remove_entry().0
-    }
 }
 
 impl<'a, T, S, A: Allocator> VacantEntry<'a, T, S, A> {
@@ -2449,7 +2030,7 @@ impl<'a, T, S, A: Allocator> VacantEntry<'a, T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
+    /// use monotable::HashSet;
     ///
     /// let mut set: HashSet<&str> = HashSet::new();
     /// assert_eq!(set.entry("poneyland").get(), &"poneyland");
@@ -2464,7 +2045,7 @@ impl<'a, T, S, A: Allocator> VacantEntry<'a, T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::hash_set::{Entry, HashSet};
+    /// use monotable::hash_set::{Entry, HashSet};
     ///
     /// let mut set: HashSet<&str> = HashSet::new();
     ///
@@ -2483,8 +2064,8 @@ impl<'a, T, S, A: Allocator> VacantEntry<'a, T, S, A> {
     /// # Examples
     ///
     /// ```
-    /// use hashbrown::HashSet;
-    /// use hashbrown::hash_set::Entry;
+    /// use monotable::HashSet;
+    /// use monotable::hash_set::Entry;
     ///
     /// let mut set: HashSet<&str> = HashSet::new();
     ///
@@ -2535,555 +2116,5 @@ fn assert_covariance() {
         v: Union<'a, &'static str, DefaultHashBuilder, A>,
     ) -> Union<'a, &'new str, DefaultHashBuilder, A> {
         v
-    }
-    fn drain<'new, A: Allocator>(d: Drain<'static, &'static str, A>) -> Drain<'new, &'new str, A> {
-        d
-    }
-}
-
-#[cfg(test)]
-mod test_set {
-    use super::{Equivalent, HashSet};
-    use crate::DefaultHashBuilder;
-    use crate::map::make_hash;
-    use std::vec::Vec;
-
-    #[test]
-    fn test_zero_capacities() {
-        type HS = HashSet<i32>;
-
-        let s = HS::new();
-        assert_eq!(s.capacity(), 0);
-
-        let s = HS::default();
-        assert_eq!(s.capacity(), 0);
-
-        let s = HS::with_hasher(DefaultHashBuilder::default());
-        assert_eq!(s.capacity(), 0);
-
-        let s = HS::with_capacity(0);
-        assert_eq!(s.capacity(), 0);
-
-        let s = HS::with_capacity_and_hasher(0, DefaultHashBuilder::default());
-        assert_eq!(s.capacity(), 0);
-
-        let mut s = HS::new();
-        s.insert(1);
-        s.insert(2);
-        s.remove(&1);
-        s.remove(&2);
-        s.shrink_to_fit();
-        assert_eq!(s.capacity(), 0);
-
-        let mut s = HS::new();
-        s.reserve(0);
-        assert_eq!(s.capacity(), 0);
-    }
-
-    #[test]
-    fn test_disjoint() {
-        let mut xs = HashSet::new();
-        let mut ys = HashSet::new();
-        assert!(xs.is_disjoint(&ys));
-        assert!(ys.is_disjoint(&xs));
-        assert!(xs.insert(5));
-        assert!(ys.insert(11));
-        assert!(xs.is_disjoint(&ys));
-        assert!(ys.is_disjoint(&xs));
-        assert!(xs.insert(7));
-        assert!(xs.insert(19));
-        assert!(xs.insert(4));
-        assert!(ys.insert(2));
-        assert!(ys.insert(-11));
-        assert!(xs.is_disjoint(&ys));
-        assert!(ys.is_disjoint(&xs));
-        assert!(ys.insert(7));
-        assert!(!xs.is_disjoint(&ys));
-        assert!(!ys.is_disjoint(&xs));
-    }
-
-    #[test]
-    fn test_subset_and_superset() {
-        let mut a = HashSet::new();
-        assert!(a.insert(0));
-        assert!(a.insert(5));
-        assert!(a.insert(11));
-        assert!(a.insert(7));
-
-        let mut b = HashSet::new();
-        assert!(b.insert(0));
-        assert!(b.insert(7));
-        assert!(b.insert(19));
-        assert!(b.insert(250));
-        assert!(b.insert(11));
-        assert!(b.insert(200));
-
-        assert!(!a.is_subset(&b));
-        assert!(!a.is_superset(&b));
-        assert!(!b.is_subset(&a));
-        assert!(!b.is_superset(&a));
-
-        assert!(b.insert(5));
-
-        assert!(a.is_subset(&b));
-        assert!(!a.is_superset(&b));
-        assert!(!b.is_subset(&a));
-        assert!(b.is_superset(&a));
-    }
-
-    #[test]
-    fn test_iterate() {
-        let mut a = HashSet::new();
-        for i in 0..32 {
-            assert!(a.insert(i));
-        }
-        let mut observed: u32 = 0;
-        for k in &a {
-            observed |= 1 << *k;
-        }
-        assert_eq!(observed, 0xFFFF_FFFF);
-    }
-
-    #[test]
-    fn test_intersection() {
-        let mut a = HashSet::new();
-        let mut b = HashSet::new();
-
-        assert!(a.insert(11));
-        assert!(a.insert(1));
-        assert!(a.insert(3));
-        assert!(a.insert(77));
-        assert!(a.insert(103));
-        assert!(a.insert(5));
-        assert!(a.insert(-5));
-
-        assert!(b.insert(2));
-        assert!(b.insert(11));
-        assert!(b.insert(77));
-        assert!(b.insert(-9));
-        assert!(b.insert(-42));
-        assert!(b.insert(5));
-        assert!(b.insert(3));
-
-        let mut i = 0;
-        let expected = [3, 5, 11, 77];
-        for x in a.intersection(&b) {
-            assert!(expected.contains(x));
-            i += 1;
-        }
-        assert_eq!(i, expected.len());
-    }
-
-    #[test]
-    fn test_difference() {
-        let mut a = HashSet::new();
-        let mut b = HashSet::new();
-
-        assert!(a.insert(1));
-        assert!(a.insert(3));
-        assert!(a.insert(5));
-        assert!(a.insert(9));
-        assert!(a.insert(11));
-
-        assert!(b.insert(3));
-        assert!(b.insert(9));
-
-        let mut i = 0;
-        let expected = [1, 5, 11];
-        for x in a.difference(&b) {
-            assert!(expected.contains(x));
-            i += 1;
-        }
-        assert_eq!(i, expected.len());
-    }
-
-    #[test]
-    fn test_symmetric_difference() {
-        let mut a = HashSet::new();
-        let mut b = HashSet::new();
-
-        assert!(a.insert(1));
-        assert!(a.insert(3));
-        assert!(a.insert(5));
-        assert!(a.insert(9));
-        assert!(a.insert(11));
-
-        assert!(b.insert(-2));
-        assert!(b.insert(3));
-        assert!(b.insert(9));
-        assert!(b.insert(14));
-        assert!(b.insert(22));
-
-        let mut i = 0;
-        let expected = [-2, 1, 5, 11, 14, 22];
-        for x in a.symmetric_difference(&b) {
-            assert!(expected.contains(x));
-            i += 1;
-        }
-        assert_eq!(i, expected.len());
-    }
-
-    #[test]
-    fn test_sub_assign() {
-        let mut a: HashSet<_> = vec![1, 2, 3, 4, 5].into_iter().collect();
-        let b: HashSet<_> = vec![4, 5, 6].into_iter().collect();
-
-        a -= &b;
-
-        let mut i = 0;
-        let expected = [1, 2, 3];
-        for x in &a {
-            assert!(expected.contains(x));
-            i += 1;
-        }
-        assert_eq!(i, expected.len());
-    }
-
-    #[test]
-    fn test_union() {
-        let mut a = HashSet::new();
-        let mut b = HashSet::new();
-
-        assert!(a.insert(1));
-        assert!(a.insert(3));
-        assert!(a.insert(5));
-        assert!(a.insert(9));
-        assert!(a.insert(11));
-        assert!(a.insert(16));
-        assert!(a.insert(19));
-        assert!(a.insert(24));
-
-        assert!(b.insert(-2));
-        assert!(b.insert(1));
-        assert!(b.insert(5));
-        assert!(b.insert(9));
-        assert!(b.insert(13));
-        assert!(b.insert(19));
-
-        let mut i = 0;
-        let expected = [-2, 1, 3, 5, 9, 11, 13, 16, 19, 24];
-        for x in a.union(&b) {
-            assert!(expected.contains(x));
-            i += 1;
-        }
-        assert_eq!(i, expected.len());
-    }
-
-    #[test]
-    fn test_from_map() {
-        let mut a = crate::HashMap::new();
-        a.insert(1, ());
-        a.insert(2, ());
-        a.insert(3, ());
-        a.insert(4, ());
-
-        let a: HashSet<_> = a.into();
-
-        assert_eq!(a.len(), 4);
-        assert!(a.contains(&1));
-        assert!(a.contains(&2));
-        assert!(a.contains(&3));
-        assert!(a.contains(&4));
-    }
-
-    #[test]
-    fn test_from_iter() {
-        let xs = [1, 2, 2, 3, 4, 5, 6, 7, 8, 9];
-
-        let set: HashSet<_> = xs.iter().copied().collect();
-
-        for x in &xs {
-            assert!(set.contains(x));
-        }
-
-        assert_eq!(set.iter().len(), xs.len() - 1);
-    }
-
-    #[test]
-    fn test_move_iter() {
-        let hs = {
-            let mut hs = HashSet::new();
-
-            hs.insert('a');
-            hs.insert('b');
-
-            hs
-        };
-
-        let v = hs.into_iter().collect::<Vec<char>>();
-        assert!(v == ['a', 'b'] || v == ['b', 'a']);
-    }
-
-    #[test]
-    fn test_eq() {
-        // These constants once happened to expose a bug in insert().
-        // I'm keeping them around to prevent a regression.
-        let mut s1 = HashSet::new();
-
-        s1.insert(1);
-        s1.insert(2);
-        s1.insert(3);
-
-        let mut s2 = HashSet::new();
-
-        s2.insert(1);
-        s2.insert(2);
-
-        assert!(s1 != s2);
-
-        s2.insert(3);
-
-        assert_eq!(s1, s2);
-    }
-
-    #[test]
-    fn test_show() {
-        let mut set = HashSet::new();
-        let empty = HashSet::<i32>::new();
-
-        set.insert(1);
-        set.insert(2);
-
-        let set_str = format!("{set:?}");
-
-        assert!(set_str == "{1, 2}" || set_str == "{2, 1}");
-        assert_eq!(format!("{empty:?}"), "{}");
-    }
-
-    #[test]
-    fn test_trivial_drain() {
-        let mut s = HashSet::<i32>::new();
-        for _ in s.drain() {}
-        assert!(s.is_empty());
-        drop(s);
-
-        let mut s = HashSet::<i32>::new();
-        drop(s.drain());
-        assert!(s.is_empty());
-    }
-
-    #[test]
-    fn test_drain() {
-        let mut s: HashSet<_> = (1..100).collect();
-
-        // try this a bunch of times to make sure we don't screw up internal state.
-        for _ in 0..20 {
-            assert_eq!(s.len(), 99);
-
-            {
-                let mut last_i = 0;
-                let mut d = s.drain();
-                for (i, x) in d.by_ref().take(50).enumerate() {
-                    last_i = i;
-                    assert!(x != 0);
-                }
-                assert_eq!(last_i, 49);
-            }
-
-            if !s.is_empty() {
-                panic!("s should be empty!");
-            }
-
-            // reset to try again.
-            s.extend(1..100);
-        }
-    }
-
-    #[test]
-    fn test_replace() {
-        use core::hash;
-
-        #[derive(Debug)]
-        #[expect(dead_code)]
-        struct Foo(&'static str, i32);
-
-        impl PartialEq for Foo {
-            fn eq(&self, other: &Self) -> bool {
-                self.0 == other.0
-            }
-        }
-
-        impl Eq for Foo {}
-
-        impl hash::Hash for Foo {
-            fn hash<H: hash::Hasher>(&self, h: &mut H) {
-                self.0.hash(h);
-            }
-        }
-
-        let mut s = HashSet::new();
-        assert_eq!(s.replace(Foo("a", 1)), None);
-        assert_eq!(s.len(), 1);
-        assert_eq!(s.replace(Foo("a", 2)), Some(Foo("a", 1)));
-        assert_eq!(s.len(), 1);
-
-        let mut it = s.iter();
-        assert_eq!(it.next(), Some(&Foo("a", 2)));
-        assert_eq!(it.next(), None);
-    }
-
-    #[test]
-    fn test_extend_ref() {
-        let mut a = HashSet::new();
-        a.insert(1);
-
-        a.extend([2, 3, 4]);
-
-        assert_eq!(a.len(), 4);
-        assert!(a.contains(&1));
-        assert!(a.contains(&2));
-        assert!(a.contains(&3));
-        assert!(a.contains(&4));
-
-        let mut b = HashSet::new();
-        b.insert(5);
-        b.insert(6);
-
-        a.extend(&b);
-
-        assert_eq!(a.len(), 6);
-        assert!(a.contains(&1));
-        assert!(a.contains(&2));
-        assert!(a.contains(&3));
-        assert!(a.contains(&4));
-        assert!(a.contains(&5));
-        assert!(a.contains(&6));
-    }
-
-    #[test]
-    fn test_retain() {
-        let xs = [1, 2, 3, 4, 5, 6];
-        let mut set: HashSet<i32> = xs.iter().copied().collect();
-        set.retain(|&k| k % 2 == 0);
-        assert_eq!(set.len(), 3);
-        assert!(set.contains(&2));
-        assert!(set.contains(&4));
-        assert!(set.contains(&6));
-    }
-
-    #[test]
-    fn test_extract_if() {
-        {
-            let mut set: HashSet<i32> = (0..8).collect();
-            let drained = set.extract_if(|&k| k % 2 == 0);
-            let mut out = drained.collect::<Vec<_>>();
-            out.sort_unstable();
-            assert_eq!(vec![0, 2, 4, 6], out);
-            assert_eq!(set.len(), 4);
-        }
-        {
-            let mut set: HashSet<i32> = (0..8).collect();
-            set.extract_if(|&k| k % 2 == 0).for_each(drop);
-            assert_eq!(set.len(), 4, "Removes non-matching items on drop");
-        }
-    }
-
-    #[test]
-    fn test_const_with_hasher() {
-        use core::hash::BuildHasher;
-        use std::collections::hash_map::DefaultHasher;
-
-        #[derive(Clone)]
-        struct MyHasher;
-        impl BuildHasher for MyHasher {
-            type Hasher = DefaultHasher;
-
-            fn build_hasher(&self) -> DefaultHasher {
-                DefaultHasher::new()
-            }
-        }
-
-        const EMPTY_SET: HashSet<u32, MyHasher> = HashSet::with_hasher(MyHasher);
-
-        let mut set = EMPTY_SET;
-        set.insert(19);
-        assert!(set.contains(&19));
-    }
-
-    #[test]
-    fn rehash_in_place() {
-        let mut set = HashSet::new();
-
-        for i in 0..224 {
-            set.insert(i);
-        }
-
-        assert_eq!(
-            set.capacity(),
-            224,
-            "The set must be at or close to capacity to trigger a re hashing"
-        );
-
-        for i in 100..1400 {
-            set.remove(&(i - 100));
-            set.insert(i);
-        }
-    }
-
-    #[test]
-    fn collect() {
-        // At the time of writing, this hits the ZST case in from_base_index
-        // (and without the `map`, it does not).
-        let mut _set: HashSet<_> = (0..3).map(|_| ()).collect();
-    }
-
-    #[test]
-    fn test_allocation_info() {
-        assert_eq!(HashSet::<()>::new().allocation_size(), 0);
-        assert_eq!(HashSet::<u32>::new().allocation_size(), 0);
-        assert!(HashSet::<u32>::with_capacity(1).allocation_size() > core::mem::size_of::<u32>());
-    }
-
-    #[test]
-    fn duplicate_insert() {
-        let mut set = HashSet::new();
-        set.insert(1);
-        set.get_or_insert_with(&1, |_| 1);
-        set.get_or_insert_with(&1, |_| 1);
-        assert!([1].iter().eq(set.iter()));
-    }
-
-    #[test]
-    #[should_panic]
-    fn some_invalid_equivalent() {
-        use core::hash::{Hash, Hasher};
-        struct Invalid {
-            count: u32,
-            other: u32,
-        }
-
-        struct InvalidRef {
-            count: u32,
-            other: u32,
-        }
-
-        impl PartialEq for Invalid {
-            fn eq(&self, other: &Self) -> bool {
-                self.count == other.count && self.other == other.other
-            }
-        }
-        impl Eq for Invalid {}
-
-        impl Equivalent<Invalid> for InvalidRef {
-            fn equivalent(&self, key: &Invalid) -> bool {
-                self.count == key.count && self.other == key.other
-            }
-        }
-        impl Hash for Invalid {
-            fn hash<H: Hasher>(&self, state: &mut H) {
-                self.count.hash(state);
-            }
-        }
-        impl Hash for InvalidRef {
-            fn hash<H: Hasher>(&self, state: &mut H) {
-                self.count.hash(state);
-            }
-        }
-        let mut set: HashSet<Invalid> = HashSet::new();
-        let key = InvalidRef { count: 1, other: 1 };
-        let value = Invalid { count: 1, other: 2 };
-        if make_hash(set.hasher(), &key) == make_hash(set.hasher(), &value) {
-            set.get_or_insert_with(&key, |_| value);
-        }
     }
 }

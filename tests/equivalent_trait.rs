@@ -1,7 +1,7 @@
 #![expect(missing_docs)] // https://github.com/rust-lang/rust/issues/137561
 
-use hashbrown::Equivalent;
-use hashbrown::HashMap;
+use monotable::Equivalent;
+use monotable::HashMap;
 
 use std::hash::Hash;
 
@@ -51,5 +51,5 @@ fn test_string_str() {
 
     assert!(map.contains_key("a"));
     assert!(!map.contains_key("z"));
-    assert_eq!(map.remove("b"), Some(2));
+    assert_eq!(map.get("b"), Some(&2));
 }

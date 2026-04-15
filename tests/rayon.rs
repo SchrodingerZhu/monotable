@@ -1,7 +1,7 @@
 #![expect(missing_docs)] // https://github.com/rust-lang/rust/issues/137561
 #![cfg(feature = "rayon")]
 
-use hashbrown::{HashMap, HashSet};
+use monotable::{HashMap, HashSet};
 use rayon::iter::{
     IntoParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelExtend,
     ParallelIterator,
