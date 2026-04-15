@@ -1,4 +1,4 @@
-use crate::{Equivalent, TryReserveError};
+use crate::{Equivalent, InsertionProposal, TryReserveError};
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::hash::{BuildHasher, Hash};
@@ -927,6 +927,34 @@ where
     #[cfg_attr(feature = "inline-more", inline)]
     pub fn insert(&mut self, value: T) -> bool {
         self.map.insert(value, ()).is_none()
+    }
+
+    /// Returns the occupied entry for `value`, or an insertion proposal that can
+    /// be reused by [`insert_with_proposal`](Self::insert_with_proposal).
+    #[cfg_attr(feature = "inline-more", inline)]
+    pub fn find_or_find_insert_proposal<Q>(
+        &mut self,
+        value: &Q,
+    ) -> Result<OccupiedEntry<'_, T, S, A>, InsertionProposal>
+    where
+        Q: Hash + Equivalent<T> + ?Sized,
+    {
+        self.map
+            .find_or_find_insert_proposal(value)
+            .map(|inner| OccupiedEntry { inner })
+    }
+
+    /// Inserts a value using a previously computed insertion proposal.
+    ///
+    /// # Safety
+    ///
+    /// `proposal` must have been returned by
+    /// [`find_or_find_insert_proposal`](Self::find_or_find_insert_proposal) on this
+    /// set. `clear` must not be called between creating the proposal and using it.
+    /// This method does not check whether an equivalent value already exists.
+    #[cfg_attr(feature = "inline-more", inline)]
+    pub unsafe fn insert_with_proposal(&mut self, proposal: InsertionProposal, value: T) -> &T {
+        unsafe { self.map.insert_with_proposal(proposal, value, ()).0 }
     }
 
     /// Insert a value the set without checking if the value already exists in the set.
@@ -2020,7 +2048,6 @@ impl<T, S, A: Allocator> OccupiedEntry<'_, T, S, A> {
     pub fn get(&self) -> &T {
         self.inner.key()
     }
-
 }
 
 impl<'a, T, S, A: Allocator> VacantEntry<'a, T, S, A> {

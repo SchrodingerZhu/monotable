@@ -1,6 +1,6 @@
 use crate::alloc::{Allocator, Global};
 use crate::raw::{Bucket, RawIntoIter, RawIter, RawTable};
-use crate::{DefaultHashBuilder, Equivalent, TryReserveError};
+use crate::{DefaultHashBuilder, Equivalent, InsertionProposal, TryReserveError};
 use core::borrow::Borrow;
 use core::fmt::{self, Debug};
 use core::hash::{BuildHasher, Hash};
@@ -1008,10 +1008,7 @@ where
     pub fn entry(&mut self, key: K) -> Entry<'_, K, V, S, A> {
         let hash = make_hash::<K, S>(&self.hash_builder, &key);
         if let Some(elem) = self.table.find(hash, equivalent_key(&key)) {
-            Entry::Occupied(OccupiedEntry {
-                elem,
-                table: self,
-            })
+            Entry::Occupied(OccupiedEntry { elem, table: self })
         } else {
             Entry::Vacant(VacantEntry {
                 hash,
@@ -1045,10 +1042,7 @@ where
     {
         let hash = make_hash::<Q, S>(&self.hash_builder, key);
         if let Some(elem) = self.table.find(hash, equivalent_key(key)) {
-            EntryRef::Occupied(OccupiedEntry {
-                elem,
-                table: self,
-            })
+            EntryRef::Occupied(OccupiedEntry { elem, table: self })
         } else {
             EntryRef::Vacant(VacantEntryRef {
                 hash,
@@ -1618,6 +1612,53 @@ where
                 None
             }
         }
+    }
+
+    /// Returns the occupied entry for `key`, or an insertion proposal that can be
+    /// reused by [`insert_with_proposal`](Self::insert_with_proposal).
+    #[cfg_attr(feature = "inline-more", inline)]
+    pub fn find_or_find_insert_proposal<Q>(
+        &mut self,
+        key: &Q,
+    ) -> Result<OccupiedEntry<'_, K, V, S, A>, InsertionProposal>
+    where
+        Q: Hash + Equivalent<K> + ?Sized,
+    {
+        let hash = make_hash::<Q, S>(&self.hash_builder, key);
+        let equivalent = equivalent_key(key);
+        let hasher = make_hasher(&self.hash_builder);
+
+        match self
+            .table
+            .find_or_find_insert_proposal(hash, equivalent, hasher)
+        {
+            Ok(elem) => Ok(OccupiedEntry { elem, table: self }),
+            Err(proposal) => Err(proposal),
+        }
+    }
+
+    /// Inserts a key-value pair using a previously computed insertion proposal.
+    ///
+    /// # Safety
+    ///
+    /// `proposal` must have been returned by
+    /// [`find_or_find_insert_proposal`](Self::find_or_find_insert_proposal) on this
+    /// map. `clear` must not be called between creating the proposal and using it.
+    /// This method does not check whether an equivalent key already exists.
+    #[cfg_attr(feature = "inline-more", inline)]
+    pub unsafe fn insert_with_proposal(
+        &mut self,
+        proposal: InsertionProposal,
+        k: K,
+        v: V,
+    ) -> (&K, &mut V) {
+        let hash = make_hash::<K, S>(&self.hash_builder, &k);
+        let bucket = unsafe {
+            self.table
+                .insert_with_proposal(proposal, hash, (k, v), make_hasher(&self.hash_builder))
+        };
+        let (key, value) = unsafe { bucket.as_mut() };
+        (key, value)
     }
 
     /// Insert a key-value pair into the map without checking

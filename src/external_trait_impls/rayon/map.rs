@@ -280,7 +280,6 @@ impl<K: Send, V: Send, S, A: Allocator> HashMap<K, V, S, A> {
             marker: PhantomData,
         }
     }
-
 }
 
 impl<K, V, S, A> HashMap<K, V, S, A>

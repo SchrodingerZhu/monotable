@@ -1,12 +1,11 @@
 use core::{fmt, iter::FusedIterator, marker::PhantomData, ptr::NonNull};
 
 use crate::{
-    TryReserveError,
+    InsertionProposal, TryReserveError,
     alloc::{Allocator, Global},
     control::Tag,
     raw::{
-        Bucket, FullBucketsIndices, RawIntoIter, RawIter, RawIterHash, RawIterHashIndices,
-        RawTable,
+        Bucket, FullBucketsIndices, RawIntoIter, RawIter, RawIterHash, RawIterHashIndices, RawTable,
     },
 };
 
@@ -705,6 +704,45 @@ where
         hasher: impl Fn(&T) -> u64,
     ) -> OccupiedEntry<'_, T, A> {
         let bucket = self.raw.insert(hash, value, hasher);
+        OccupiedEntry {
+            bucket,
+            table: self,
+        }
+    }
+
+    /// Returns the occupied entry matching `eq`, or an insertion proposal that can
+    /// be reused by [`insert_with_proposal`](Self::insert_with_proposal).
+    pub fn find_or_find_insert_proposal(
+        &mut self,
+        hash: u64,
+        eq: impl FnMut(&T) -> bool,
+        hasher: impl Fn(&T) -> u64,
+    ) -> Result<OccupiedEntry<'_, T, A>, InsertionProposal> {
+        match self.raw.find_or_find_insert_proposal(hash, eq, hasher) {
+            Ok(bucket) => Ok(OccupiedEntry {
+                bucket,
+                table: self,
+            }),
+            Err(proposal) => Err(proposal),
+        }
+    }
+
+    /// Inserts a value using a previously computed insertion proposal.
+    ///
+    /// # Safety
+    ///
+    /// `proposal` must have been returned by
+    /// [`find_or_find_insert_proposal`](Self::find_or_find_insert_proposal) on this
+    /// table. `clear` must not be called between creating the proposal and using
+    /// it. This method does not check whether an equivalent element already exists.
+    pub unsafe fn insert_with_proposal(
+        &mut self,
+        proposal: InsertionProposal,
+        hash: u64,
+        value: T,
+        hasher: impl Fn(&T) -> u64,
+    ) -> OccupiedEntry<'_, T, A> {
+        let bucket = unsafe { self.raw.insert_with_proposal(proposal, hash, value, hasher) };
         OccupiedEntry {
             bucket,
             table: self,
@@ -2029,7 +2067,6 @@ where
     pub fn bucket_index(&self) -> usize {
         unsafe { self.table.raw.bucket_index(&self.bucket) }
     }
-
 }
 
 /// A view into a vacant entry in a `HashTable`.

@@ -70,6 +70,7 @@ pub use crate::hasher::DefaultHasher;
 
 pub mod hash_map {
     //! A hash map implemented with quadratic probing and SIMD lookup.
+    pub use crate::InsertionProposal;
     pub use crate::map::*;
 
     #[cfg(feature = "rustc-internal-api")]
@@ -87,6 +88,7 @@ pub mod hash_map {
 }
 pub mod hash_set {
     //! A hash set implemented as a `HashMap` where the value is `()`.
+    pub use crate::InsertionProposal;
     pub use crate::set::*;
 
     #[cfg(feature = "rayon")]
@@ -101,6 +103,7 @@ pub mod hash_set {
 }
 pub mod hash_table {
     //! A hash table implemented with quadratic probing and SIMD lookup.
+    pub use crate::InsertionProposal;
     pub use crate::table::*;
 
     #[cfg(feature = "rayon")]
@@ -115,6 +118,7 @@ pub mod hash_table {
 }
 
 pub use crate::map::HashMap;
+pub use crate::raw::InsertionProposal;
 pub use crate::set::HashSet;
 pub use crate::table::HashTable;
 

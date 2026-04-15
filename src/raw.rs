@@ -71,7 +71,7 @@ fn h1(hash: u64) -> usize {
 ///
 /// Proof that the probe will visit every group in the table:
 /// <https://fgiesen.wordpress.com/2015/02/22/triangular-numbers-mod-2n/>
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 struct ProbeSeq {
     pos: usize,
     stride: usize,
@@ -90,6 +90,25 @@ impl ProbeSeq {
         self.pos += self.stride;
         self.pos &= bucket_mask;
     }
+}
+
+/// Opaque insertion proposal returned by lookup APIs that split probing from insertion.
+///
+/// A proposal caches probe state from a prior lookup. It may become stale before the
+/// actual insertion happens if the table grows or if another insertion occupies the
+/// proposed slot.
+#[derive(Clone, Copy)]
+pub struct InsertionProposal {
+    probe_seq: ProbeSeq,
+    ctrl_snapshot: NonNull<u8>,
+    bucket_mask: usize,
+    index: usize,
+}
+
+enum ProposalStatus {
+    Valid,
+    Rehashed,
+    Occupied,
 }
 
 /// Returns the number of buckets needed to hold the given number of items,
@@ -919,9 +938,20 @@ impl<T, A: Allocator> RawTable<T, A> {
     pub(crate) fn find_or_find_insert_index(
         &mut self,
         hash: u64,
-        mut eq: impl FnMut(&T) -> bool,
+        eq: impl FnMut(&T) -> bool,
         hasher: impl Fn(&T) -> u64,
     ) -> Result<Bucket<T>, usize> {
+        self.find_or_find_insert_proposal(hash, eq, hasher)
+            .map_err(|proposal| proposal.index)
+    }
+
+    #[inline]
+    pub(crate) fn find_or_find_insert_proposal(
+        &mut self,
+        hash: u64,
+        mut eq: impl FnMut(&T) -> bool,
+        hasher: impl Fn(&T) -> u64,
+    ) -> Result<Bucket<T>, InsertionProposal> {
         self.reserve(1, hasher);
 
         unsafe {
@@ -938,8 +968,51 @@ impl<T, A: Allocator> RawTable<T, A> {
             {
                 // SAFETY: See explanation above.
                 Ok(index) => Ok(self.bucket(index)),
-                Err(index) => Err(index),
+                Err(insertion_proposal) => Err(insertion_proposal),
             }
+        }
+    }
+
+    /// # Safety
+    ///
+    /// `proposal` must come from this table, and `clear` must not have been called
+    /// since it was created.
+    unsafe fn validate_proposal(&self, proposal: InsertionProposal) -> ProposalStatus {
+        if self.table.ctrl != proposal.ctrl_snapshot
+            || self.table.bucket_mask != proposal.bucket_mask
+            || self.table.growth_left == 0
+        {
+            return ProposalStatus::Rehashed;
+        }
+        if unsafe { self.is_bucket_full(proposal.index) } {
+            return ProposalStatus::Occupied;
+        }
+        ProposalStatus::Valid
+    }
+
+    /// Inserts a value using a previously computed insertion proposal.
+    ///
+    /// # Safety
+    ///
+    /// `proposal` must come from this table. `clear` must not have been called since
+    /// the proposal was created. This method does not check whether an equivalent
+    /// element already exists.
+    pub(crate) unsafe fn insert_with_proposal(
+        &mut self,
+        proposal: InsertionProposal,
+        hash: u64,
+        value: T,
+        hasher: impl Fn(&T) -> u64,
+    ) -> Bucket<T> {
+        match unsafe { self.validate_proposal(proposal) } {
+            ProposalStatus::Valid => unsafe { self.insert_at_index(hash, proposal.index, value) },
+            ProposalStatus::Occupied => unsafe {
+                let new_index = self
+                    .table
+                    .find_insert_index_with_probe_seq(proposal.probe_seq);
+                self.insert_at_index(hash, new_index, value)
+            },
+            ProposalStatus::Rehashed => self.insert(hash, value, hasher),
         }
     }
 
@@ -1567,7 +1640,7 @@ impl RawTableInner {
         &self,
         hash: u64,
         eq: &mut dyn FnMut(usize) -> bool,
-    ) -> Result<usize, usize> {
+    ) -> Result<usize, InsertionProposal> {
         let tag_hash = Tag::full(hash);
         let mut probe_seq = self.probe_seq(hash);
 
@@ -1602,7 +1675,12 @@ impl RawTableInner {
                     // SAFETY:
                     // * Caller of this function ensures that the control bytes are properly initialized.
                     // * We use this function with the index found by `self.find_insert_index_in_group`.
-                    return Err(self.fix_insert_index(insert_index));
+                    return Err(InsertionProposal {
+                        probe_seq: probe_seq,
+                        ctrl_snapshot: self.ctrl,
+                        bucket_mask: self.bucket_mask,
+                        index: self.fix_insert_index(insert_index),
+                    });
                 }
             }
 
@@ -1703,7 +1781,11 @@ impl RawTableInner {
     /// [`undefined behavior`]: https://doc.rust-lang.org/reference/behavior-considered-undefined.html
     #[inline]
     unsafe fn find_insert_index(&self, hash: u64) -> usize {
-        let mut probe_seq = self.probe_seq(hash);
+        unsafe { self.find_insert_index_with_probe_seq(self.probe_seq(hash)) }
+    }
+
+    #[inline]
+    unsafe fn find_insert_index_with_probe_seq(&self, mut probe_seq: ProbeSeq) -> usize {
         loop {
             // SAFETY:
             // * Caller of this function ensures that the control bytes are properly initialized.
@@ -2678,7 +2760,6 @@ impl RawTableInner {
         self.items = 0;
         self.growth_left = bucket_mask_to_capacity(self.bucket_mask);
     }
-
 }
 
 impl<T: Clone, A: Allocator + Clone> Clone for RawTable<T, A> {

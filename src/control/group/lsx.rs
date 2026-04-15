@@ -68,16 +68,12 @@ impl Group {
     /// `EMPTY`.
     #[inline]
     pub(crate) fn match_empty(self) -> BitMask {
-        unsafe {
-            BitMask(lsx_vpickve2gr_hu::<0>(lsx_vmskltz_b(self.0)) as u16)
-        }
+        unsafe { BitMask(lsx_vpickve2gr_hu::<0>(lsx_vmskltz_b(self.0)) as u16) }
     }
 
     /// Returns a `BitMask` indicating all tags in the group which are full.
     #[inline]
     pub(crate) fn match_full(&self) -> BitMask {
-        unsafe {
-            BitMask(lsx_vpickve2gr_hu::<0>(lsx_vmskgez_b(self.0)) as u16)
-        }
+        unsafe { BitMask(lsx_vpickve2gr_hu::<0>(lsx_vmskgez_b(self.0)) as u16) }
     }
 }

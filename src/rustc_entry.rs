@@ -406,7 +406,6 @@ impl<'a, K, V, A: Allocator> RustcOccupiedEntry<'a, K, V, A> {
     pub fn insert(&mut self, value: V) -> V {
         mem::replace(self.get_mut(), value)
     }
-
 }
 
 impl<'a, K, V, A: Allocator> RustcVacantEntry<'a, K, V, A> {

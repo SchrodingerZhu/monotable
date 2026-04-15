@@ -782,7 +782,6 @@ impl<'a, K, V, S, A: Allocator> RawEntryMut<'a, K, V, S, A> {
             RawEntryMut::Vacant(entry) => RawEntryMut::Vacant(entry),
         }
     }
-
 }
 
 impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
@@ -1086,7 +1085,6 @@ impl<'a, K, V, S, A: Allocator> RawOccupiedEntryMut<'a, K, V, S, A> {
     pub fn insert_key(&mut self, key: K) -> K {
         mem::replace(self.key_mut(), key)
     }
-
 }
 
 impl<'a, K, V, S, A: Allocator> RawVacantEntryMut<'a, K, V, S, A> {

@@ -123,8 +123,7 @@ impl<T: fmt::Debug, A: Allocator> fmt::Debug for IntoParIter<T, A> {
     }
 }
 
-impl<T: Send, A: Allocator> HashTable<T, A> {
-}
+impl<T: Send, A: Allocator> HashTable<T, A> {}
 
 impl<T: Send, A: Allocator + Send> IntoParallelIterator for HashTable<T, A> {
     type Item = T;
