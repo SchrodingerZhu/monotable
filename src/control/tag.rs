@@ -6,10 +6,7 @@ use core::{fmt, mem};
 pub(crate) struct Tag(pub(super) u8);
 impl Tag {
     /// Control tag value for an empty bucket.
-    pub(crate) const EMPTY: Tag = Tag(0b1111_1111);
-
-    /// Control tag value for a deleted bucket.
-    pub(crate) const DELETED: Tag = Tag(0b1000_0000);
+    pub(crate) const EMPTY: Tag = Tag(0b1000_0000);
 
     /// Checks whether a control tag represents a full bucket (top bit is clear).
     #[inline]
@@ -17,17 +14,10 @@ impl Tag {
         self.0 & 0x80 == 0
     }
 
-    /// Checks whether a control tag represents a special value (top bit is set).
+    /// Checks whether a control tag represents an empty bucket.
     #[inline]
-    pub(crate) const fn is_special(self) -> bool {
+    pub(crate) const fn is_empty(self) -> bool {
         self.0 & 0x80 != 0
-    }
-
-    /// Checks whether a special control value is EMPTY (just check 1 bit).
-    #[inline]
-    pub(crate) const fn special_is_empty(self) -> bool {
-        debug_assert!(self.is_special());
-        self.0 & 0x01 != 0
     }
 
     /// Creates a control tag representing a full bucket with the given hash.
@@ -50,12 +40,8 @@ impl Tag {
 }
 impl fmt::Debug for Tag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_special() {
-            if self.special_is_empty() {
-                f.pad("EMPTY")
-            } else {
-                f.pad("DELETED")
-            }
+        if self.is_empty() {
+            f.pad("EMPTY")
         } else {
             f.debug_tuple("full").field(&(self.0 & 0x7F)).finish()
         }

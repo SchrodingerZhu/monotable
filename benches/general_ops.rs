@@ -398,11 +398,10 @@ pub(crate) fn register_benches(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("rehash_in_place", |b| {
+    c.bench_function("rehash_on_growth", |b| {
         b.iter(|| {
             let mut set = HashSet::new();
 
-            // Each loop triggers one rehash
             for _ in 0..10 {
                 for i in 0..223 {
                     set.insert(i);
@@ -411,11 +410,12 @@ pub(crate) fn register_benches(c: &mut Criterion) {
                 assert_eq!(
                     set.capacity(),
                     224,
-                    "The set must be at or close to capacity to trigger a re hashing"
+                    "The set must be at or close to capacity before rebuilding"
                 );
 
+                set.clear();
+
                 for i in 100..1400 {
-                    set.remove(&(i - 100));
                     set.insert(i);
                 }
                 set.clear();

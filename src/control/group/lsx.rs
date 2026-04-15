@@ -54,16 +54,6 @@ impl Group {
         unsafe { Group(lsx_vld::<0>(ptr.cast())) }
     }
 
-    /// Stores the group of tags to the given address, which must be
-    /// aligned to `mem::align_of::<Group>()`.
-    #[inline]
-    pub(crate) unsafe fn store_aligned(self, ptr: *mut Tag) {
-        debug_assert_eq!(ptr.align_offset(mem::align_of::<Self>()), 0);
-        unsafe {
-            lsx_vst::<0>(self.0, ptr.cast());
-        }
-    }
-
     /// Returns a `BitMask` indicating all tags in the group which have
     /// the given value.
     #[inline]
@@ -79,17 +69,6 @@ impl Group {
     #[inline]
     pub(crate) fn match_empty(self) -> BitMask {
         unsafe {
-            let cmp = lsx_vseqi_b::<{ Tag::EMPTY.0 as i8 as i32 }>(self.0);
-            BitMask(lsx_vpickve2gr_hu::<0>(lsx_vmskltz_b(cmp)) as u16)
-        }
-    }
-
-    /// Returns a `BitMask` indicating all tags in the group which are
-    /// `EMPTY` or `DELETED`.
-    #[inline]
-    pub(crate) fn match_empty_or_deleted(self) -> BitMask {
-        unsafe {
-            // A tag is EMPTY or DELETED iff the high bit is set
             BitMask(lsx_vpickve2gr_hu::<0>(lsx_vmskltz_b(self.0)) as u16)
         }
     }
@@ -98,27 +77,7 @@ impl Group {
     #[inline]
     pub(crate) fn match_full(&self) -> BitMask {
         unsafe {
-            // A tag is EMPTY or DELETED iff the high bit is set
             BitMask(lsx_vpickve2gr_hu::<0>(lsx_vmskgez_b(self.0)) as u16)
-        }
-    }
-
-    /// Performs the following transformation on all tags in the group:
-    /// - `EMPTY => EMPTY`
-    /// - `DELETED => EMPTY`
-    /// - `FULL => DELETED`
-    #[inline]
-    pub(crate) fn convert_special_to_empty_and_full_to_deleted(self) -> Self {
-        // Map high_bit = 1 (EMPTY or DELETED) to 1111_1111
-        // and high_bit = 0 (FULL) to 1000_0000
-        //
-        // Here's this logic expanded to concrete values:
-        //   let special = 0 > tag = 1111_1111 (true) or 0000_0000 (false)
-        //   1111_1111 | 1000_0000 = 1111_1111
-        //   0000_0000 | 1000_0000 = 1000_0000
-        unsafe {
-            let special = lsx_vslti_b::<0>(self.0);
-            Group(lsx_vori_b::<{ Tag::DELETED.0 as u32 }>(special))
         }
     }
 }

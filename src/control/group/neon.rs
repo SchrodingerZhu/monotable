@@ -52,16 +52,6 @@ impl Group {
         unsafe { Group(neon::vld1_u8(ptr.cast())) }
     }
 
-    /// Stores the group of tags to the given address, which must be
-    /// aligned to `mem::align_of::<Group>()`.
-    #[inline]
-    pub(crate) unsafe fn store_aligned(self, ptr: *mut Tag) {
-        debug_assert_eq!(ptr.align_offset(mem::align_of::<Self>()), 0);
-        unsafe {
-            neon::vst1_u8(ptr.cast(), self.0);
-        }
-    }
-
     /// Returns a `BitMask` indicating all tags in the group which *may*
     /// have the given value.
     #[inline]
@@ -76,13 +66,6 @@ impl Group {
     /// `EMPTY`.
     #[inline]
     pub(crate) fn match_empty(self) -> BitMask {
-        self.match_tag(Tag::EMPTY)
-    }
-
-    /// Returns a `BitMask` indicating all tags in the group which are
-    /// `EMPTY` or `DELETED`.
-    #[inline]
-    pub(crate) fn match_empty_or_deleted(self) -> BitMask {
         unsafe {
             let cmp = neon::vcltz_s8(neon::vreinterpret_s8_u8(self.0));
             BitMask(neon::vget_lane_u64(neon::vreinterpret_u64_u8(cmp), 0))
@@ -95,25 +78,6 @@ impl Group {
         unsafe {
             let cmp = neon::vcgez_s8(neon::vreinterpret_s8_u8(self.0));
             BitMask(neon::vget_lane_u64(neon::vreinterpret_u64_u8(cmp), 0))
-        }
-    }
-
-    /// Performs the following transformation on all tags in the group:
-    /// - `EMPTY => EMPTY`
-    /// - `DELETED => EMPTY`
-    /// - `FULL => DELETED`
-    #[inline]
-    pub(crate) fn convert_special_to_empty_and_full_to_deleted(self) -> Self {
-        // Map high_bit = 1 (EMPTY or DELETED) to 1111_1111
-        // and high_bit = 0 (FULL) to 1000_0000
-        //
-        // Here's this logic expanded to concrete values:
-        //   let special = 0 > tag = 1111_1111 (true) or 0000_0000 (false)
-        //   1111_1111 | 1000_0000 = 1111_1111
-        //   0000_0000 | 1000_0000 = 1000_0000
-        unsafe {
-            let special = neon::vcltz_s8(neon::vreinterpret_s8_u8(self.0));
-            Group(neon::vorr_u8(special, neon::vdup_n_u8(0x80)))
         }
     }
 }

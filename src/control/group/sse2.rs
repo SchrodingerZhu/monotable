@@ -57,16 +57,6 @@ impl Group {
         unsafe { Group(x86::_mm_load_si128(ptr.cast())) }
     }
 
-    /// Stores the group of tags to the given address, which must be
-    /// aligned to `mem::align_of::<Group>()`.
-    #[inline]
-    pub(crate) unsafe fn store_aligned(self, ptr: *mut Tag) {
-        debug_assert_eq!(ptr.align_offset(mem::align_of::<Self>()), 0);
-        unsafe {
-            x86::_mm_store_si128(ptr.cast(), self.0);
-        }
-    }
-
     /// Returns a `BitMask` indicating all tags in the group which have
     /// the given value.
     #[inline]
@@ -89,13 +79,6 @@ impl Group {
     /// `EMPTY`.
     #[inline]
     pub(crate) fn match_empty(self) -> BitMask {
-        self.match_tag(Tag::EMPTY)
-    }
-
-    /// Returns a `BitMask` indicating all tags in the group which are
-    /// `EMPTY` or `DELETED`.
-    #[inline]
-    pub(crate) fn match_empty_or_deleted(self) -> BitMask {
         #[expect(
             // tag: i32 as u16
             //   note: _mm_movemask_epi8 returns a 16-bit mask in a i32, the
@@ -104,7 +87,6 @@ impl Group {
             clippy::cast_possible_truncation
         )]
         unsafe {
-            // A tag is EMPTY or DELETED iff the high bit is set
             BitMask(x86::_mm_movemask_epi8(self.0) as u16)
         }
     }
@@ -112,32 +94,6 @@ impl Group {
     /// Returns a `BitMask` indicating all tags in the group which are full.
     #[inline]
     pub(crate) fn match_full(&self) -> BitMask {
-        BitMask(!self.match_empty_or_deleted().0)
-    }
-
-    /// Performs the following transformation on all tags in the group:
-    /// - `EMPTY => EMPTY`
-    /// - `DELETED => EMPTY`
-    /// - `FULL => DELETED`
-    #[inline]
-    pub(crate) fn convert_special_to_empty_and_full_to_deleted(self) -> Self {
-        // Map high_bit = 1 (EMPTY or DELETED) to 1111_1111
-        // and high_bit = 0 (FULL) to 1000_0000
-        //
-        // Here's this logic expanded to concrete values:
-        //   let special = 0 > tag = 1111_1111 (true) or 0000_0000 (false)
-        //   1111_1111 | 1000_0000 = 1111_1111
-        //   0000_0000 | 1000_0000 = 1000_0000
-        #[expect(
-            clippy::cast_possible_wrap, // tag: Tag::DELETED.0 as i8
-        )]
-        unsafe {
-            let zero = x86::_mm_setzero_si128();
-            let special = x86::_mm_cmpgt_epi8(zero, self.0);
-            Group(x86::_mm_or_si128(
-                special,
-                x86::_mm_set1_epi8(Tag::DELETED.0 as i8),
-            ))
-        }
+        BitMask(!self.match_empty().0)
     }
 }
